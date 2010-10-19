@@ -42,14 +42,14 @@
 (defn mk-store [s3 & [m]]
   (let [m (or m identity)]
     (obj {:put (fn [b v k] (put* (m b) s3 v k))
-	  :keys (fn [b] (keys* (m b) s3))
-	  :get (fn [b k] (get* (m b) s3 k))
-	  :update (fn [b k] (update* (m b) s3 k))
-	  :delete (fn [b k] (delete* (m b) s3 k))
-	  :exists? (fn [b k] (exists?* (m b) s3 k))})))
+          :keys (fn [b] (keys* (m b) s3))
+          :get (fn [b k] (get* (m b) s3 k))
+          :update (fn [b k] (update* (m b) s3 k))
+          :delete (fn [b k] (delete* (m b) s3 k))
+          :exists? (fn [b k] (exists?* (m b) s3 k))})))
 
 ;;TODO: can't compose in this way becasue macro evaluates the map at macroexpand time.  change in clomert.
-#_(defn mk-store-cache [config]
+(defn mk-store-cache [config]
   (let [factory (v/make-socket-store-client-factory
                  (v/make-client-config config))
         m (java.util.concurrent.ConcurrentHashMap.)]
