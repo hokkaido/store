@@ -1,4 +1,6 @@
-Store is a general key-value store api in Clojure.
+#Store
+
+Store general key-value store api in Clojure.
 
 It supports the following operations:
 
