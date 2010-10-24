@@ -11,28 +11,26 @@
 (defn mk-store [s3 & [m]]
   (let [m (or m identity)]
     (obj {:put (fn [b v k]
-		 (try-default nil put-clj s3 (m b) (str k) v))
-	  :keys (fn [b]
-		  (try-default nil
-			       get-keys s3 (m b)))
+                 (try-default nil put-clj s3 (m b) (str k) v))
+          :keys (fn [b]
+                  (try-default nil
+                               get-keys s3 (m b)))
+          :get (fn [b k]
+                 (try-default nil
+                              get-clj s3 (m b) (str k)))
+          :update (fn [b k]
+                    (try-default nil
+                                 append-clj s3 (m b) (str k)))
+          :delete (fn [b k]
+                    (try-default nil
+                                 delete-object s3 (m b) (str k)))
 
-	  :get (fn [b k]
-		 (try-default nil
-			      get-clj s3 (m b) (str k)))
-	  :update (fn [b k]
-		    (try-default nil
-				 append-clj s3 (m b) (str k)))
-	  :delete (fn [b k]
-		    (try-default nil
-				 delete-object s3 (m b) (str k)))
-
-	  :exists? (fn [b k]
-		     (or
-		      (some #(= k (.getKey %))
-			    (try-default nil
-					 (comp seq objects)
-					 s3 (m b) (str k)))
-		      false))})))
+          :exists? (fn [b k]
+                     (or (some #(= k (.getKey %))
+                               (try-default nil
+                                            (comp seq objects)
+                                            s3 (m b) (str k)))
+                         false))})))
 
 (defn mk-store-cache [config]
   (let [factory (v/make-socket-store-client-factory
