@@ -13,6 +13,7 @@ not [[12] 3] -> [1 2 3]
 [xs]
   (let [root (first xs)]
     (cond
+     (nil? root) (second xs)
      (string? root) (apply str xs) 
      (map? root) (apply merge xs)
      (vector? root) (vec (apply concat xs))
