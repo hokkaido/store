@@ -18,9 +18,9 @@
           :get (fn [b k]
                  (try-default nil
                               get-clj s3 (m b) (str k)))
-          :update (fn [b k]
+          :update (fn [b v k]
                     (try-default nil
-                                 append-clj s3 (m b) (str k)))
+                                 append-clj s3 (m b) (str k) v))
           :delete (fn [b k]
                     (try-default nil
                                  delete-object s3 (m b) (str k)))
