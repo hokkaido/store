@@ -48,7 +48,9 @@ store.s3
   (.deleteBucket s3 bucket-name))
 
 (defn delete-object [s3 bucket-name key]
-  (.deleteObject s3 bucket-name key))
+  ;; In case the J3tset API changes and starts returning non-nil on success.
+  (or (.deleteObject s3 bucket-name key)
+      :success))
 
 (defn put-file
   ([s3 bucket-name file]
