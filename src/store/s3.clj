@@ -139,11 +139,13 @@ store.s3
 ;;move append to primary location
 ;;delete individual appends.
 (defn append-str [s3 bucket-name key data]
-  (let [old (get-str s3 bucket-name key)]
+  (let [old (try-default nil
+                         get-str s3 bucket-name key)]
     (put-str s3 bucket-name key (append [old data]))))
 
 (defn append-clj [s3 bucket-name key data]
-  (let [old (get-clj s3 bucket-name key)]
+  (let [old (try-default nil
+                         get-clj s3 bucket-name key)]
     (put-clj s3 bucket-name key (append [old data]))))
 
 (defn files [dir]
