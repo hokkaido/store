@@ -49,6 +49,8 @@ store.s3
 
 (defn delete-object [s3 bucket-name key]
   ;; In case the J3tset API changes and starts returning non-nil on success.
+  ;; NOTE: S3 seems to be returning nil regardless of whether key existed.
+  ;; In that case, this function always returns success even if key didn't exist.
   (or (.deleteObject s3 bucket-name key)
       :success))
 
