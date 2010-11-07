@@ -1,7 +1,8 @@
 (ns store.api
-  (:use store.s3)
-  (:use store.core)
-  (:require [clomert :as v]))
+  (:require [clomert :as v])
+  (:use store.s3
+        store.core)
+  (:import [java.util.concurrent ConcurrentHashMap]))
 
 (defn obj [s]
   (fn [op & args]
@@ -35,13 +36,28 @@
 (defn mk-store-cache [config]
   (let [factory (v/make-socket-store-client-factory
                  (v/make-client-config config))
-        m (java.util.concurrent.ConcurrentHashMap.)]
+        m (ConcurrentHashMap.)]
     (fn [client]
       (if-let [c (get m client)]
         c
         (let [c (v/make-store-client factory client)]
           (.put m client c)
           c)))))
+
+(defn mk-chmstore
+  [store-names]
+  (let [stores (zipmap store-names
+                       (repeatedly (ConcurrentHashMap.)))]
+    (obj {:put (fn [n v k]
+                 (.put (stores n) k v))
+          :keys (fn [n]
+                  (enumeration-seq (.keys (stores n))))
+          :get (fn [n k]
+                 (.get (stores n) k))
+          :delete (fn [n k]
+                    (.remove (stores n) k))
+          :exists? (fn [n k]
+                     (.containsKey (stores n) k))})))
        
 (defn mk-vstore
   [stores]
