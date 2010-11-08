@@ -1,5 +1,6 @@
 (ns store.api
-  (:require [clomert :as v])
+  (:require [clomert :as v]
+            [redis.core :as redis])
   (:use store.s3
         store.core)
   (:import [java.util.concurrent ConcurrentHashMap]))
@@ -43,6 +44,31 @@
         (let [c (v/make-store-client factory client)]
           (.put m client c)
           c)))))
+
+(defn mk-rstore
+  "Redis store."
+  [server-spec store-names]
+  (let [mk-key #(format "%s:%s" %1 %2)]
+    (obj {:put (fn [n v k]
+                 (redis/with-server server-spec
+                   (redis/set (mk-key n k)
+                              (pr-str v))))
+          :keys (fn [n]
+                  (redis/with-server server-spec
+                    (let [prefix-ln (inc (.length n))]
+                      (doall (map #(.substring % prefix-ln)
+                                  (redis/keys (format "%s:*" n)))))))
+          :get (fn [n k]
+                 (redis/with-server server-spec
+                   (if-let [val (redis/get (mk-key n k))]
+                     (read-string val)
+                     nil)))
+          :delete (fn [n k]
+                    (redis/with-server server-spec
+                      (redis/del (mk-key n k))))
+          :exists? (fn [n k]
+                     (redis/with-server server-spec
+                       (redis/exists (mk-key n k))))})))
 
 (defn mk-chmstore
   [store-names]
