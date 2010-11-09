@@ -1,9 +1,9 @@
 (ns store.api
-  (:require [clomert :as v]
-            [redis.core :as redis])
+  (:require [clomert :as v])
   (:use store.s3
         store.core)
-  (:import [java.util.concurrent ConcurrentHashMap]))
+  (:import [java.util.concurrent ConcurrentHashMap]
+           [redis.clients.jedis JedisPool Jedis]))
 
 (defn obj [s]
   (fn [op & args]
@@ -45,30 +45,40 @@
           (.put m client c)
           c)))))
 
+(defmacro with-jedis-client
+  [^JedisPool pool cname & body]
+  `(let [~(with-meta (symbol cname) {:tag Jedis}) (.getResource ~pool)]
+     (try
+       ~@body
+       (finally (.returnResource ~pool ~cname)))))
+
 (defn mk-rstore
   "Redis store."
-  [server-spec store-names]
-  (let [mk-key #(format "%s:%s" %1 %2)]
+  [{host :host
+    port :port
+    timeout :timeout} store-names]
+  (let [mk-key #(format "%s:%s" %1 %2)
+        ^JedisPool jedis-pool (doto (JedisPool. host port timeout)
+                                (.init))]
     (obj {:put (fn [n v k]
-                 (redis/with-server server-spec
-                   (redis/set (mk-key n k)
-                              (pr-str v))))
+                 (with-jedis-client jedis-pool c
+                   (.set c (mk-key n k) (pr-str v))))
           :keys (fn [n]
-                  (redis/with-server server-spec
+                  (with-jedis-client jedis-pool c
                     (let [prefix-ln (inc (.length n))]
                       (doall (map #(.substring % prefix-ln)
-                                  (redis/keys (format "%s:*" n)))))))
+                                  (.keys c (format "%s:*" n)))))))
           :get (fn [n k]
-                 (redis/with-server server-spec
-                   (if-let [val (redis/get (mk-key n k))]
+                 (with-jedis-client jedis-pool c
+                   (if-let [val (.get c (mk-key n k))]
                      (read-string val)
                      nil)))
           :delete (fn [n k]
-                    (redis/with-server server-spec
-                      (redis/del (mk-key n k))))
+                    (with-jedis-client jedis-pool c
+                      (.del c (mk-key n k))))
           :exists? (fn [n k]
-                     (redis/with-server server-spec
-                       (redis/exists (mk-key n k))))})))
+                     (with-jedis-client jedis-pool c
+                       (.exists c (mk-key n k))))})))
 
 (defn mk-chmstore
   [store-names]
