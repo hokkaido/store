@@ -75,7 +75,7 @@
                      nil)))
           :delete (fn [n k]
                     (with-jedis-client jedis-pool c
-                      (.del c (mk-key n k))))
+                      (.del c (into-array [(mk-key n k)]))))
           :exists? (fn [n k]
                      (with-jedis-client jedis-pool c
                        (.exists c (mk-key n k))))})))
