@@ -1,8 +1,9 @@
 (ns store.api
   (:require [clomert :as v])
   (:use store.s3
-        store.core)
-  (:import [java.util.concurrent ConcurrentHashMap]
+        store.core
+        [work.core :only [retry]])
+  (:import [java.util.concurrent ConcurrentHashMap TimeoutException]
            [redis.clients.jedis JedisPool Jedis]))
 
 (defn obj [s]
@@ -46,45 +47,53 @@
           c)))))
 
 (defmacro with-jedis-client
-  [^JedisPool pool cname client-timeout & body]
+  [^JedisPool pool cname client-timeout retry-count & body]
   `(let [~(with-meta (symbol cname) {:tag Jedis}) (.getResource ~pool ~client-timeout)]
-     (try
-       ~@body
-       (finally (.returnResource ~pool ~cname)))))
+     (retry ~retry-count
+            (fn [] (try ~@body
+                        (finally (.returnResource ~pool ~cname)))))))
 
 (defn mk-rstore
   "Redis store."
-  ([server-spec store-names]
-     (mk-rstore server-spec store-names 50))
-  ([{host :host
-     port :port
-     timeout :timeout} store-names pool-timeout]
-     (let [mk-key #(format "%s:%s" %1 %2)
-           ^JedisPool jedis-pool (doto (JedisPool. host port timeout)
-                                   (.init))]
-       (obj {:put (fn [n v k]
-                    (with-jedis-client jedis-pool c pool-timeout
-                      (.set c (mk-key n k) (pr-str v))))
-             :keys (fn [n]
-                     (println "requesting client for keys")
-                     (with-jedis-client jedis-pool c pool-timeout
-                       (println "got client for keys")
-                       (let [prefix-ln (inc (.length n))]
-                         (doall (map #(.substring % prefix-ln)
-                                     (.keys c (format "%s:*" n)))))))
-             :get (fn [n k]
-                    (with-jedis-client jedis-pool c pool-timeout
-                      (if-let [val (.get c (mk-key n k))]
-                        (read-string val)
-                        nil)))
-             :delete (fn [n k]
-                       (println (format "getting client to delete %s:%s" n k))
-                       (with-jedis-client jedis-pool c pool-timeout
-                         (println (format "got client to delete %s:%s" n k))
-                         (.del c (into-array [(mk-key n k)]))))
-             :exists? (fn [n k]
-                        (with-jedis-client jedis-pool c pool-timeout
-                          (.exists c (mk-key n k))))}))))
+  [{host :host
+    port :port
+    timeout :timeout}
+   keyspaces
+   & {:keys [pool-timeout retry-count] :or {:pool-timeout 50
+                                            :retry-count 10}}]
+  (let [mk-key #(format "%s:%s" %1 %2)
+        ^JedisPool jedis-pool (doto (JedisPool. host port timeout)
+                                (.init))
+        keyspaces (apply hash-set keyspaces)
+        ensure-valid-name (fn [f]
+                            (fn [n & args]
+                              (if (contains? keyspaces n)
+                                (apply f (cons n args))
+                                (throw (Exception. (format "Invalid store name, %s" n))))))]
+    (obj {:put (ensure-valid-name
+                (fn [n v k]
+                  (with-jedis-client jedis-pool c pool-timeout retry-count
+                    (.set c (mk-key n k) (pr-str v)))))
+          :keys (ensure-valid-name
+                 (fn [n]
+                   (with-jedis-client jedis-pool c pool-timeout retry-count
+                     (let [prefix-ln (inc (.length n))]
+                       (doall (map #(.substring % prefix-ln)
+                                   (.keys c (format "%s:*" n))))))))
+          :get (ensure-valid-name
+                (fn [n k]
+                  (with-jedis-client jedis-pool c pool-timeout retry-count
+                    (if-let [val (.get c (mk-key n k))]
+                      (read-string val)
+                      nil))))
+          :delete (ensure-valid-name
+                   (fn [n k]
+                     (with-jedis-client jedis-pool c pool-timeout retry-count
+                       (.del c (into-array [(mk-key n k)])))))
+          :exists? (ensure-valid-name
+                    (fn [n k]
+                      (with-jedis-client jedis-pool c pool-timeout retry-count
+                        (.exists c (mk-key n k)))))})))
 
 (defn mk-chmstore
   [store-names]
