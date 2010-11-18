@@ -59,9 +59,9 @@
     port :port
     timeout :timeout}
    keyspaces
-   & {:keys [pool-timeout retry-count] :or {:pool-timeout 50
-                                            :retry-count 10
-                                            :num-clients 20}}]
+   & {:keys [pool-timeout retry-count num-clients] :or {:pool-timeout 50
+                                                        :retry-count 10
+                                                        :num-clients 20}}]
   (let [mk-key #(format "%s:%s" %1 %2)
         ^JedisPool jedis-pool (doto (JedisPool. host port timeout)
                                 (.setResourcesNumber num-clients)
