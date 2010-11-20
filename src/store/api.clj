@@ -126,7 +126,7 @@
 	 (bucket-keys [this]
 	       (bucket-keys read-bucket-impl))))
 
-(defn- default-store-op [bucket-map default-bucket-fn op bucket & 
+(defn- default-store-op [bucket-map default-bucket-fn op bucket & args]
   (let [bucket-impl (or (@bucket-map bucket)
 			((swap! bucket-map assoc bucket (default-bucket-fn bucket)) bucket))
 		bucket-op
