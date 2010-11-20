@@ -1,15 +1,8 @@
 (ns store.core-test
   (:use clojure.test
-	store.core))
+	store.api))
 
-(deftest append-clj-data
-  (is (= [1 2]
-	 (append [[1] [2]])))
-  (is (= [2]
-	 (append [nil [2]])))
-  (is (= {:a 1 :b 2}
-	 (append [{:a 1} {:b 2}])))
-  (is (= '(1 2)
-	 (append ['(1) '(2)])))
-  (is (= "foo.bar"
-	 (append ["foo." "bar"]))))
+(deftest basic-store-test
+  (let [s (mk-store)]
+    (s :put "b1" "k1" "v1")
+    (is (= (s :get "b1" "k1") "v1"))))

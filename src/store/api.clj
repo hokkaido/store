@@ -7,11 +7,11 @@
            [redis.clients.jedis JedisPool Jedis]))
 
 (defprotocol IBucket
-  (get [this k] "fetch value for key")
-  (put [this k v] "write value for key")
-  (keys [this] "seq of existing keys")
-  (delete [this k] "remove key-value pair")
-  (exists? [this k] "does key-value pair exists"))
+  (bucket-get [this k] "fetch value for key")
+  (bucket-put [this k v] "write value for key")
+  (bucket-keys [this] "seq of existing keys")
+  (bucket-delete [this k] "remove key-value pair")
+  (bucket-exists? [this k] "does key-value pair exists"))
 
 ;; Redis
 
@@ -27,7 +27,7 @@
 (defn redis-bucket
   "returns callback fn for a Redis backed bucketbucket"
   [{:keys [host,port,timeout] :as spec}
-   ^String keyspace &
+   ^String bucket &
    {:keys [pool-timeout,retry-count,num-clients]
     :or {:pool-timeout 50
 	 :retry-count 10
@@ -35,42 +35,42 @@
     :as opts}]  
   (let [^JedisPool jedis-pool (doto (JedisPool. host port timeout))]
     (reify IBucket
-	   (get [this k]
+	   (bucket-get [this k]
 		(with-jedis-client jedis-pool c pool-timeout retry-count
-		  (if-let [val (.get c (mk-key keyspace k))]
+		  (if-let [val (.get c (mk-key bucket k))]
 		    (read-string val)
 		    nil)))
-	   (put [this k v]
+	   (bucket-put [this k v]
 		(with-jedis-client jedis-pool c pool-timeout retry-count
-		  (.set c (mk-key keyspace k) (pr-str v))))
-	   (keys [this]
+		  (.set c (mk-key bucket k) (pr-str v))))
+	   (bucket-keys [this]
 		 (with-jedis-client jedis-pool c pool-timeout retry-count
-		   (let [prefix-ln (inc (.length keyspace))]
+		   (let [prefix-ln (inc (.length bucket))]
 		     (doall (map #(.substring % prefix-ln)
-				 (.keys c (format "%s:*" keyspace)))))))
-	   (delete [this k]
+				 (.keys c (format "%s:*" bucket)))))))
+	   (bucket-delete [this k]
 		   (with-jedis-client jedis-pool c pool-timeout retry-count
-		     (.del c (into-array [(mk-key keyspace k)]))))
-	   (exists? [this k]
+		     (.del c (into-array [(mk-key bucket k)]))))
+	   (bucket-exists? [this k]
 		    (with-jedis-client jedis-pool c pool-timeout retry-count
-		      (.exists c (mk-key keyspace k)))))))
+		      (.exists c (mk-key bucket k)))))))
 
 (defn fs-bucket [dir-path]
   (reify IBucket
-	 (get [this k]
+	 (bucket-get [this k]
 	      (let [f (java.io.File. dir-path k)]
 		(when (.exists f)
 		  (-> f slurp read-string))))
-	 (put [this k v]
+	 (bucket-put [this k v]
 	      (spit (.getAbsolutePath (java.io.File. dir-path k))
-		    (pr-str v)))
-	 (exists? [this k]
+		    v))
+	 (bucket-exists? [this k]
 		  (let [f (java.io.File. dir-path k)]
 		    (.exists f)))
-	 (delete [this k]
+	 (bucket-delete [this k]
 		 (let [f (java.io.File. dir-path k)]
 		   (.delete f)))
-	 (keys [this]
+	 (bucket-keys [this]
 	       (for [f (.listFiles (java.io.File. dir-path))]
 		 (.getName f)))))
 
@@ -78,14 +78,14 @@
   []
   (let [h (ConcurrentHashMap.)]
     (reify IBucket
-	   (put [this k v]
+	   (bucket-put [this k v]
 		(.put h k v))
-	   (keys [this] (enumeration-seq (.keys h)))
-	   (get [this k]
+	   (bucket-keys [this] (enumeration-seq (.keys h)))
+	   (bucket-get [this k]
 		(.get h k))
-	   (delete [this k]
+	   (bucket-delete [this k]
 		   (.remove h k))
-	   (exists? [this k]
+	   (bucket-exists? [this k]
 		    (.containsKey h k)))))
 
 (defn s3-bucket
@@ -94,19 +94,19 @@
   [s3 b & [m]]
   (let [m (or m identity)]
     (reify IBucket
-           (put [this k v]
+           (bucket-put [this k v]
                 (try-default nil put-clj s3 (m b) (str k) v))
-           (keys [this]
+           (bucket-keys [this]
                  (try-default nil
                               get-keys s3 (m b)))
-           (get [this k]
+           (bucket-get [this k]
                 (try-default nil
                              get-clj s3 (m b) (str k)))
-           (delete [this k]
+           (bucket-delete [this k]
                    (try-default nil
                                 delete-object s3 (m b) (str k)))
 
-           (exists? [this k]
+           (bucket-exists? [this k]
                     (or (some #(= k (.getKey %))
                               (try-default nil
                                            (comp seq objects)
@@ -115,44 +115,54 @@
 
 (defn read-write-bucket [read-bucket-impl write-bucket-impl]
   (reify IBucket
-	 (get [this k]
-	      (get read-bucket-impl k))
-	 (put [this k v]
-	      (put write-bucket-impl k v))	 
-	 (exists? [this k]
-		  (exists? read-bucket-impl k))
-	 (delete [this k]
-		 (delete write-bucket-impl k))
-	 (keys [this]
-	       (keys read-bucket-impl))))
+	 (bucket-get [this k]
+	      (bucket-get read-bucket-impl k))
+	 (bucket-put [this k v]
+	      (bucket-put write-bucket-impl k v))	 
+	 (bucket-exists? [this k]
+		  (bucket-exists? read-bucket-impl k))
+	 (bucket-delete [this k]
+		 (bucket-delete write-bucket-impl k))
+	 (bucket-keys [this]
+	       (bucket-keys read-bucket-impl))))
 
-(declare mk-store)
+(defn- default-store-op [bucket-map default-bucket-fn op bucket & 
+  (let [bucket-impl (or (@bucket-map bucket)
+			((swap! bucket-map assoc bucket (default-bucket-fn bucket)) bucket))
+		bucket-op
+		(case op
+		       :get bucket-get
+		       :put bucket-put
+		       :keys bucket-keys
+		       :exists? bucket-exists?
+		       :delete bucket-delete)]
+    (apply bucket-op bucket-impl args)))
+
+(deftype Store [bucket-map default-bucket-fn]
+
+  clojure.lang.Associative
+  (assoc [this bucket bucket-impl]
+    (Store.
+      (atom (assoc @bucket-map bucket bucket-impl))
+      default-bucket-fn))
+
+  clojure.lang.IFn
+  (invoke [this op bucket]
+	  (default-store-op bucket-map default-bucket-fn op bucket))
+  (invoke [this op bucket key]
+	  (default-store-op bucket-map default-bucket-fn op bucket key))
+  (invoke [this op bucket key value]
+	  (default-store-op bucket-map default-bucket-fn op bucket key value)))
 
 (defn mk-store
-  "Mapping of keyspace -> impl."
-  ([m default-bucket-fn]
-     (let [m (atom m)]
-       (fn [op bucket & the-rest]
-	 (let [bucket-impl (or (@m bucket)
-			       ((swap! m assoc bucket (first the-rest)) bucket))]
-	   (cond
-	     (= op :assoc)
-	     (mk-store (assoc @m bucket bucket-impl) default-bucket-fn)
-	     (= op :see) @m
-	     :default
-	     (let [bucket-op (case op
-				   :get get
-				   :put put
-				   :keys keys
-				   :exists? exists?
-				   :delete delete)]
-	       (apply bucket-op bucket-impl the-rest)))))))
-  ([default-bucket-fn] (mk-store {} default-bucket-fn))
-  ([] (mk-store hashmap-bucket)))
+  ([default-bucket-fn]
+     (Store. (atom {}) default-bucket-fn))
+  ([] (mk-store (fn [_] (hashmap-bucket)))))
 
-(defn add-bucket [store bucket bucket-impl]
-  (store :assoc bucket bucket-impl))
-
+(defn mk-redis-store [spec opts]
+  (Store. (atom {})
+	  (fn [bucket]
+	    (apply redis-bucket spec bucket (seq opts)))))
 
 ;;; Old stuff below, swapping out as soon as all code is moved over to use new store buckets.
 
