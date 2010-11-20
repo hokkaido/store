@@ -129,13 +129,12 @@
 (defn- default-store-op [bucket-map default-bucket-fn op bucket & args]
   (let [bucket-impl (or (@bucket-map bucket)
 			((swap! bucket-map assoc bucket (default-bucket-fn bucket)) bucket))
-		bucket-op
-		(case op
-		       :get bucket-get
-		       :put bucket-put
-		       :keys bucket-keys
-		       :exists? bucket-exists?
-		       :delete bucket-delete)]
+	bucket-op (case op
+			:get bucket-get
+			:put bucket-put
+			:keys bucket-keys
+			:exists? bucket-exists?
+			:delete bucket-delete)]
     (apply bucket-op bucket-impl args)))
 
 (deftype Store [bucket-map default-bucket-fn]
