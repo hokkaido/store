@@ -6,6 +6,94 @@
   (:import [java.util.concurrent ConcurrentHashMap TimeoutException]
            [redis.clients.jedis JedisPool Jedis]))
 
+(defprotocol IBucket
+  get [this k]
+  put [this k v]
+  keys [this]
+  delete [this k]
+  exists? [this k])
+
+(defmacro with-jedis-client
+  [^JedisPool pool cname client-timeout retry-count & body]
+  `(let [~(with-meta (symbol cname) {:tag Jedis}) (.getResource ~pool ~client-timeout)]
+     (retry ~retry-count
+            (fn [] (try ~@body
+                        (finally (.returnResource ~pool ~cname)))))))
+
+(defn mk-redis-bucket
+  [[{host :host
+     port :port
+     timeout :timeout}
+    keyspace
+    & {:keys [pool-timeout retry-count num-clients] :or {:pool-timeout 50
+                                                         :retry-count 10
+                                                         :num-clients 20}}]]
+  (reify IBucket
+         (get [this k]
+              (with-jedis-client jedis-pool c pool-timeout retry-count
+                (if-let [val (.get c (mk-key keyspace k))]
+                  (read-string val)
+                  nil)))
+         (put [this k v]
+              (with-jedis-client jedis-pool c pool-timeout retry-count
+                (.set c (mk-key keyspace k) (pr-str v))))
+         (keys [this]
+               (with-jedis-client jedis-pool c pool-timeout retry-count
+                 (let [prefix-ln (inc (.length n))]
+                   (doall (map #(.substring % prefix-ln)
+                               (.keys c (format "%s:*" n)))))))
+         (delete [this k]
+                 (with-jedis-client jedis-pool c pool-timeout retry-count
+                   (.del c (into-array [(mk-key keyspace k)]))))
+         (exists? [this k]
+                  (with-jedis-client jedis-pool c pool-timeout retry-count
+                    (.exists c (mk-key keyspace k))))))
+
+(defn mk-hashmap-bucket
+  []
+  (let [h (ConcurrentHashMap.)]
+    (reify
+     (put [this k v]
+          (.put h k v))
+     (keys [this] (enumeration-seq (.keys h)))
+     (get [k]
+          (.get h k))
+     (delete [k]
+             (.remove h k))
+     (exists? [n k]
+              (.containsKey h k)))))
+
+(defn mk-s3-bucket
+  "Takes a S3 connection, a bucket name, and an optional map from logical
+  bucket name to actual S3 bucket name."
+  [s3 b & [m]]
+  (let [m (or m identity)]
+    (reify IBucket
+           (put [this k v]
+                (try-default nil put-clj s3 (m b) (str k) v))
+           (keys [this]
+                 (try-default nil
+                              get-keys s3 (m b)))
+           (get [this k]
+                (try-default nil
+                             get-clj s3 (m b) (str k)))
+           (delete [this k]
+                   (try-default nil
+                                delete-object s3 (m b) (str k)))
+
+           (exists? [this k]
+                    (or (some #(= k (.getKey %))
+                              (try-default nil
+                                           (comp seq objects)
+                                           s3 (m b) (str k)))
+                        false)))))
+
+(defn mk-store-set
+  "Mapping of keyspace -> impl."
+  [keyspace-impls])
+
+;;; Old stuff below, swapping out as soon as all code is moved over to use new store buckets.
+
 (defn obj [s]
   (fn [op & args]
     (let [f (s op)]
@@ -46,13 +134,6 @@
           (.put m client c)
           c)))))
 
-(defmacro with-jedis-client
-  [^JedisPool pool cname client-timeout retry-count & body]
-  `(let [~(with-meta (symbol cname) {:tag Jedis}) (.getResource ~pool ~client-timeout)]
-     (retry ~retry-count
-            (fn [] (try ~@body
-                        (finally (.returnResource ~pool ~cname)))))))
-
 (defn mk-rstore
   "Redis store."
   [{host :host
@@ -64,7 +145,8 @@
                                                         :num-clients 20}}]
   (let [mk-key #(format "%s:%s" %1 %2)
         ^JedisPool jedis-pool (doto (JedisPool. host port timeout)
-                                (.setResourcesNumber num-clients)
+                                ;; Was getting NPE below
+                                ;; (.setResourcesNumber num-clients)
                                 (.init))
         keyspaces (apply hash-set keyspaces)
         ensure-valid-name (fn [f]
