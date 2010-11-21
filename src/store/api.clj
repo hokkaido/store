@@ -35,9 +35,9 @@
 	 retry-count 10
 	 num-clients 20}
     :as spec}]
-  (let [^JedisPool jedis-pool (doto (JedisPool. ^String host ^int port timeout)
-				(.setResourcesNumber ^int num-clients)
-				(.init))]
+  (let [jedis-pool (doto (JedisPool. ^String host ^int port timeout)
+		     (.setResourcesNumber ^int num-clients)
+		     (.init))]
     (reify IBucket
 	   (bucket-get [this k]
 		(with-jedis-client jedis-pool c pool-timeout retry-count
@@ -60,23 +60,25 @@
 		      (.exists c (mk-key bucket k)))))))
 
 (defn fs-bucket [dir-path]
+  ; ensure directory exists
+  (-> dir-path java.io.File. .mkdirs)
   (reify IBucket
 	 (bucket-get [this k]
-	      (let [f (java.io.File. dir-path k)]
-		(when (.exists f)
-		  (-> f slurp read-string))))
+		     (let [f (java.io.File. dir-path k)]
+		       (when (.exists f)
+			 (-> f slurp read-string))))
 	 (bucket-put [this k v]
-	      (spit (.getAbsolutePath (java.io.File. dir-path k))
-		    v))
+		     (spit (.getAbsolutePath (java.io.File. dir-path k))
+			   v))
 	 (bucket-exists? [this k]
-		  (let [f (java.io.File. dir-path k)]
-		    (.exists f)))
+			 (let [f (java.io.File. dir-path k)]
+			   (.exists f)))
 	 (bucket-delete [this k]
-		 (let [f (java.io.File. dir-path k)]
-		   (.delete f)))
+			(let [f (java.io.File. dir-path k)]
+			  (.delete f)))
 	 (bucket-keys [this]
-	       (for [f (.listFiles (java.io.File. dir-path))]
-		 (.getName f)))))
+		      (for [f (.listFiles (java.io.File. dir-path))]
+			(.getName f)))))
 
 (defn hashmap-bucket
   []
@@ -141,6 +143,11 @@
       (atom (assoc @bucket-map bucket bucket-impl))
       default-bucket-fn))
 
+  clojure.lang.Seqable
+  (seq [this]
+       (for [bucket-key @bucket-map]
+	  [bucket-key (@bucket-map bucket-key)]))
+
   clojure.lang.IFn
   (invoke [this op bucket]
 	  (default-store-op bucket-map default-bucket-fn op bucket))
@@ -148,6 +155,17 @@
 	  (default-store-op bucket-map default-bucket-fn op bucket key))
   (invoke [this op bucket key value]
 	  (default-store-op bucket-map default-bucket-fn op bucket key value)))
+
+(defn copy-bucket [src dst]
+  (doseq [k (bucket-keys src)]
+    (bucket-put dst k (bucket-get src k))))
+
+(defn copy-store [src ^Store dst]
+  (reduce (fn [res [bucket-key bucket] src]
+	    (assoc res bucket-key
+		   (copy-bucket bucket (.default-bucket-fn dst bucket-key))))
+	  dst
+	  src))
 
 (defn mk-store
   "mk-store by default uses an empty
@@ -166,10 +184,10 @@
   (Store. (atom {}) (fn [bucket] (apply redis-bucket bucket (flatten spec)))))
 
 (defn mk-s3-store
-  [s3 & m]
+  [s3 & bucket-name-map]
   (Store. (atom {})
-	  (fn [bucket]
-	    (s3-bucket (m bucket)))))
+	  (fn [local-bucket-name]
+	    (s3-bucket (bucket-name-map local-bucket-name)))))
 
 ;;; Old stuff below, swapping out as soon as all code is moved over to use new store buckets.
 
