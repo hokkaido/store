@@ -2,7 +2,7 @@
   (:require [clomert :as v])
   (:use store.s3
         store.core
-	[plumbing.core :only [retry]])
+	[plumbing.core :only [retry -?> try-silent rpartial]])
   (:import [java.util.concurrent ConcurrentHashMap TimeoutException]
            [redis.clients.jedis JedisPool Jedis]))
 
@@ -26,23 +26,27 @@
 
 (defn redis-bucket
   "returns callback fn for a Redis backed bucketbucket"
-  [{:keys [host,port,timeout] :as spec}
-   ^String bucket &
-   {:keys [pool-timeout,retry-count,num-clients]
-    :or {:pool-timeout 50
-	 :retry-count 10
-	 :num-clients 20}
-    :as opts}]  
-  (let [^JedisPool jedis-pool (doto (JedisPool. host port timeout))]
+  [^String bucket &
+   {:keys [host,port,timeout,pool-timeout,retry-count,num-clients]
+    :or {host "127.0.0.1"
+	 port 6379
+	 timeout 50
+	 pool-timeout 50
+	 retry-count 10
+	 num-clients 20}
+    :as spec}]
+  (let [^JedisPool jedis-pool (doto (JedisPool. ^String host ^int port timeout)
+				(.setResourcesNumber ^int num-clients)
+				(.init))]
     (reify IBucket
 	   (bucket-get [this k]
 		(with-jedis-client jedis-pool c pool-timeout retry-count
-		  (if-let [val (.get c (mk-key bucket k))]
-		    (read-string val)
-		    nil)))
+		  (when-let [val (.get c (mk-key bucket k))]
+		    (read-string val))))
 	   (bucket-put [this k v]
 		(with-jedis-client jedis-pool c pool-timeout retry-count
-		  (.set c (mk-key bucket k) (pr-str v))))
+		  (.set c (mk-key bucket k) (pr-str v))
+		  nil))
 	   (bucket-keys [this]
 		 (with-jedis-client jedis-pool c pool-timeout retry-count
 		   (let [prefix-ln (inc (.length bucket))]
@@ -91,27 +95,19 @@
 (defn s3-bucket
   "Takes a S3 connection, a bucket name, and an optional map from logical
   bucket name to actual S3 bucket name."
-  [s3 b & [m]]
-  (let [m (or m identity)]
-    (reify IBucket
-           (bucket-put [this k v]
-                (try-default nil put-clj s3 (m b) (str k) v))
-           (bucket-keys [this]
-                 (try-default nil
-                              get-keys s3 (m b)))
-           (bucket-get [this k]
-                (try-default nil
-                             get-clj s3 (m b) (str k)))
-           (bucket-delete [this k]
-                   (try-default nil
-                                delete-object s3 (m b) (str k)))
-
-           (bucket-exists? [this k]
-                    (or (some #(= k (.getKey %))
-                              (try-default nil
-                                           (comp seq objects)
-                                           s3 (m b) (str k)))
-                        false)))))
+  [s3 bucket-name]
+  (reify IBucket
+	 (bucket-put [this k v]
+	    (try-silent (put-clj s3 bucket-name (str k) v)))
+	 (bucket-keys [this]
+	    (try-silent (get-keys s3 bucket-name)))
+	 (bucket-get [this k]
+	    (try-silent (get-clj s3 bucket-name (str k))))
+	 (bucket-delete [this k]
+	    (try-silent (delete-object s3 bucket-name (str k))))	 
+	 (bucket-exists? [this k]
+	    (some #(= k (.getKey %))
+		  (-?> s3 (objects bucket-name (str k)) seq)))))
 
 (defn read-write-bucket [read-bucket-impl write-bucket-impl]
   (reify IBucket
@@ -154,14 +150,26 @@
 	  (default-store-op bucket-map default-bucket-fn op bucket key value)))
 
 (defn mk-store
+  "mk-store by default uses an empty
+   bucket binding and concurrent hashmap
+   implementations"
   ([default-bucket-fn]
      (Store. (atom {}) default-bucket-fn))
   ([] (mk-store (fn [_] (hashmap-bucket)))))
 
-(defn mk-redis-store [spec opts]
+(defn mk-redis-store
+  "A store where default bucket implementations
+   is redis with a given server spec.
+
+   See redis-bucket for docmentation about keys in spec"
+  [spec]
+  (Store. (atom {}) (fn [bucket] (apply redis-bucket bucket (flatten spec)))))
+
+(defn mk-s3-store
+  [s3 & m]
   (Store. (atom {})
 	  (fn [bucket]
-	    (apply redis-bucket spec bucket (seq opts)))))
+	    (s3-bucket (m bucket)))))
 
 ;;; Old stuff below, swapping out as soon as all code is moved over to use new store buckets.
 
