@@ -75,33 +75,30 @@
   (when (re-seq #"s+" s)
     (throw (RuntimeException. "FS key cannot contain spaces"))))
 
-(defn- bytes-from-file [^java.io.File f]
-  )
-
 (defn fs-bucket [dir-path]
   ; ensure directory exists
-  (let [dir-path (encode-fs-str dir-path)]
-    (-> dir-path java.io.File. .mkdirs)
-    (reify IBucket
-	   (bucket-get [this k]
-		       (validate-fs-key k)
-		       (let [f (java.io.File. dir-path (encode-fs-str k))]
-			 (when (.exists f) (thaw f))))
-	   (bucket-put [this k v]
-		       (validate-fs-key k)
-		       (let [f (java.io.File. dir-path (encode-fs-str k))]
-			 (freeze f v)))
-	   (bucket-exists? [this k]
-			   (validate-fs-key k)
-			   (let [f (java.io.File. dir-path (encode-fs-str k))]
-			     (.exists f)))
-	   (bucket-delete [this k]
-			  (validate-fs-key k)
-			  (let [f (java.io.File. dir-path (encode-fs-str k))]
-			    (.delete f)))
-	   (bucket-keys [this]
-			(for [f (.listFiles (java.io.File. dir-path))]
-			  (decode-fs-str (.getName f)))))))
+  (-> dir-path java.io.File. .mkdirs)
+  (reify IBucket
+	 (bucket-get [this k]
+		     (validate-fs-key k)
+		     (let [f (java.io.File. dir-path (encode-fs-str k))]
+		       (when (.exists f) (thaw f))))
+	 (bucket-put [this k v]
+		     (validate-fs-key k)
+		     (let [f (java.io.File. dir-path (encode-fs-str k))]
+		       (.delete f)
+		       (freeze f v)))
+	 (bucket-exists? [this k]
+			 (validate-fs-key k)
+			 (let [f (java.io.File. dir-path (encode-fs-str k))]
+			   (.exists f)))
+	 (bucket-delete [this k]
+			(validate-fs-key k)
+			(let [f (java.io.File. dir-path (encode-fs-str k))]
+			  (.delete f)))
+	 (bucket-keys [this]
+		      (for [f (.listFiles (java.io.File. dir-path))]
+			(decode-fs-str (.getName f))))))
 
 ;; ConcurrentHashMap
 
