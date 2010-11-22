@@ -113,7 +113,8 @@
 		(.put h k (to-bytes v)))
 	   (bucket-keys [this] (enumeration-seq (.keys h)))
 	   (bucket-get [this k]
-		(from-bytes (.get h k)))
+		       (when-let [v (.get h k)]
+			 (from-bytes v)))
 	   (bucket-delete [this k]
 		   (.remove h k))
 	   (bucket-exists? [this k]
