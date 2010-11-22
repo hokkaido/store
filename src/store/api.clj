@@ -2,6 +2,7 @@
   (:require [clomert :as v])
   (:use store.s3
         store.core
+	[clojure.string :only [escape]]
 	[plumbing.core :only [retry -?> try-silent rpartial]])
   (:import [java.util.concurrent ConcurrentHashMap TimeoutException]
            [redis.clients.jedis JedisPool Jedis]))
@@ -59,26 +60,43 @@
 		    (with-jedis-client jedis-pool c pool-timeout retry-count
 		      (.exists c (mk-key bucket k)))))))
 
+(defn- encode-fs-str [s]
+  (-> (str s)
+      (.replaceAll (str (java.io.File/separatorChar)) "#sep#")))
+
+(defn- decode-fs-str [s]
+  (-> (str s)
+      (.replaceAll "#sep#" (str (java.io.File/separatorChar)))))
+
+(defn- validate-fs-key [s]
+  (when (re-seq #"s+" s)
+    (throw (RuntimeException. "FS key cannot contain spaces"))))
+
 (defn fs-bucket [dir-path]
   ; ensure directory exists
-  (-> dir-path java.io.File. .mkdirs)
-  (reify IBucket
-	 (bucket-get [this k]
-		     (let [f (java.io.File. dir-path k)]
-		       (when (.exists f)
-			 (-> f slurp read-string))))
-	 (bucket-put [this k v]
-		     (spit (.getAbsolutePath (java.io.File. dir-path k))
-			   v))
-	 (bucket-exists? [this k]
-			 (let [f (java.io.File. dir-path k)]
-			   (.exists f)))
-	 (bucket-delete [this k]
-			(let [f (java.io.File. dir-path k)]
-			  (.delete f)))
-	 (bucket-keys [this]
-		      (for [f (.listFiles (java.io.File. dir-path))]
-			(.getName f)))))
+  (let [dir-path (encode-fs-str dir-path)]
+    (-> dir-path java.io.File. .mkdirs)
+    (reify IBucket
+	   (bucket-get [this k]
+		       (validate-fs-key k)
+		       (let [f (java.io.File. dir-path (encode-fs-str k))]
+			 (when (.exists f)
+			   (-> f slurp read-string))))
+	   (bucket-put [this k v]
+		       (validate-fs-key k)
+		       (spit (.getAbsolutePath (java.io.File. dir-path (encode-fs-str k)))
+			     (pr-str v)))
+	   (bucket-exists? [this k]
+			   (validate-fs-key k)
+			   (let [f (java.io.File. dir-path (encode-fs-str k))]
+			     (.exists f)))
+	   (bucket-delete [this k]
+			  (validate-fs-key k)
+			  (let [f (java.io.File. dir-path (encode-fs-str k))]
+			    (.delete f)))
+	   (bucket-keys [this]
+			(for [f (.listFiles (java.io.File. dir-path))]
+			  (decode-fs-str (.getName f)))))))
 
 (defn hashmap-bucket
   []
@@ -184,7 +202,7 @@
   (Store. (atom {}) (fn [bucket] (apply redis-bucket bucket (flatten spec)))))
 
 (defn mk-s3-store
-  [s3 & bucket-name-map]
+  [s3 bucket-name-map]
   (Store. (atom {})
 	  (fn [local-bucket-name]
 	    (s3-bucket (bucket-name-map local-bucket-name)))))
