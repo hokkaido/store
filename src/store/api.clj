@@ -3,6 +3,7 @@
   (:use store.s3
         store.core
 	[clojure.string :only [escape]]
+	[plumbing.freezer :only [freeze thaw to-bytes from-bytes]]
 	[plumbing.core :only [retry -?> try-silent rpartial]])
   (:import [java.util.concurrent ConcurrentHashMap TimeoutException]
            [redis.clients.jedis JedisPool Jedis]))
@@ -43,10 +44,10 @@
 	   (bucket-get [this k]
 		(with-jedis-client jedis-pool c pool-timeout retry-count
 		  (when-let [val (.get c (mk-key bucket k))]
-		    (read-string val))))
+		    (-> val .getBytes from-bytes))))
 	   (bucket-put [this k v]
 		(with-jedis-client jedis-pool c pool-timeout retry-count
-		  (.set c (mk-key bucket k) (pr-str v))
+		  (.set c (mk-key bucket k) (-> v to-bytes (String.)))
 		  nil))
 	   (bucket-keys [this]
 		 (with-jedis-client jedis-pool c pool-timeout retry-count
@@ -60,6 +61,8 @@
 		    (with-jedis-client jedis-pool c pool-timeout retry-count
 		      (.exists c (mk-key bucket k)))))))
 
+;; File System
+
 (defn- encode-fs-str [s]
   (-> (str s)
       (.replaceAll (str (java.io.File/separatorChar)) "#sep#")))
@@ -72,6 +75,9 @@
   (when (re-seq #"s+" s)
     (throw (RuntimeException. "FS key cannot contain spaces"))))
 
+(defn- bytes-from-file [^java.io.File f]
+  )
+
 (defn fs-bucket [dir-path]
   ; ensure directory exists
   (let [dir-path (encode-fs-str dir-path)]
@@ -80,12 +86,11 @@
 	   (bucket-get [this k]
 		       (validate-fs-key k)
 		       (let [f (java.io.File. dir-path (encode-fs-str k))]
-			 (when (.exists f)
-			   (-> f slurp read-string))))
+			 (when (.exists f) (thaw f))))
 	   (bucket-put [this k v]
 		       (validate-fs-key k)
-		       (spit (.getAbsolutePath (java.io.File. dir-path (encode-fs-str k)))
-			     (pr-str v)))
+		       (let [f (java.io.File. dir-path (encode-fs-str k))]
+			 (freeze f v)))
 	   (bucket-exists? [this k]
 			   (validate-fs-key k)
 			   (let [f (java.io.File. dir-path (encode-fs-str k))]
@@ -98,19 +103,23 @@
 			(for [f (.listFiles (java.io.File. dir-path))]
 			  (decode-fs-str (.getName f)))))))
 
+;; ConcurrentHashMap
+
 (defn hashmap-bucket
   []
   (let [h (ConcurrentHashMap.)]
     (reify IBucket
 	   (bucket-put [this k v]
-		(.put h k v))
+		(.put h k (to-bytes v)))
 	   (bucket-keys [this] (enumeration-seq (.keys h)))
 	   (bucket-get [this k]
-		(.get h k))
+		(from-bytes (.get h k)))
 	   (bucket-delete [this k]
 		   (.remove h k))
 	   (bucket-exists? [this k]
-		    (.containsKey h k)))))
+			   (.containsKey h k)))))
+
+;; S3
 
 (defn s3-bucket
   "Takes a S3 connection, a bucket name, and an optional map from logical
@@ -129,6 +138,8 @@
 	    (some #(= k (.getKey %))
 		  (-?> s3 (objects bucket-name (str k)) seq)))))
 
+;; Generic Buckets
+
 (defn read-write-bucket [read-bucket-impl write-bucket-impl]
   (reify IBucket
 	 (bucket-get [this k]
@@ -140,7 +151,27 @@
 	 (bucket-delete [this k]
 		 (bucket-delete write-bucket-impl k))
 	 (bucket-keys [this]
-	       (bucket-keys read-bucket-impl))))
+		      (bucket-keys read-bucket-impl))))
+
+(defn copy-bucket [src dst]
+  (doseq [k (bucket-keys src)]
+    (bucket-put dst k (bucket-get src k))))
+
+;; (def serialize-obj
+;;      (let [class-to-ctor (atom {})]
+;;        (fn [o]
+;; 	 (serialize-obj o))))
+
+;; (defn serialize-bucket [class]
+;;   (let [^java.lang.Constructor ctor (first (sort-by #(-> % .getParameterTypes .length) (.getConstructors class)))
+;; 	num-args (-> ctor .getParameterTypes .length)
+;; 	create (fn [m]
+;; 		 (into (.newInstance)))]
+;;     (reify IBucket
+;; 	   (bucket-get [this key]
+;; 		       ))))
+
+;; Store 
 
 (defn- default-store-op [bucket-map default-bucket-fn op bucket & args]
   (let [bucket-impl (or (@bucket-map bucket)
@@ -174,16 +205,14 @@
   (invoke [this op bucket key value]
 	  (default-store-op bucket-map default-bucket-fn op bucket key value)))
 
-(defn copy-bucket [src dst]
-  (doseq [k (bucket-keys src)]
-    (bucket-put dst k (bucket-get src k))))
-
 (defn copy-store [src ^Store dst]
   (reduce (fn [res [bucket-key bucket] src]
 	    (assoc res bucket-key
 		   (copy-bucket bucket (.default-bucket-fn dst bucket-key))))
 	  dst
 	  src))
+
+;; Create Store
 
 (defn mk-store
   "mk-store by default uses an empty
@@ -193,19 +222,29 @@
      (Store. (atom {}) default-bucket-fn))
   ([] (mk-store (fn [_] (hashmap-bucket)))))
 
+(def default-redis-config
+     {:host "127.0.0.1"
+      :port 6379
+      :timeout 0
+      :pool-timeout 500
+      :retry-count 20
+      :num-clients 20})
+
 (defn mk-redis-store
   "A store where default bucket implementations
    is redis with a given server spec.
 
    See redis-bucket for docmentation about keys in spec"
-  [spec]
-  (Store. (atom {}) (fn [bucket] (apply redis-bucket bucket (flatten spec)))))
+  ([spec]
+     (Store. (atom {}) (fn [bucket] (apply redis-bucket bucket (flatten spec)))))
+  ([] (mk-redis-store default-redis-config)))
 
 (defn mk-s3-store
   [s3 bucket-name-map]
   (Store. (atom {})
 	  (fn [local-bucket-name]
 	    (s3-bucket (bucket-name-map local-bucket-name)))))
+
 
 ;;; Old stuff below, swapping out as soon as all code is moved over to use new store buckets.
 
