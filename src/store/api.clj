@@ -43,7 +43,8 @@
     (reify IBucket
 	   (bucket-get [this k]
 		(with-jedis-client jedis-pool c pool-timeout retry-count
-		  (when-let [val (.get c (mk-key bucket k))]
+		  (when-let [val (when (.exists c (mk-key bucket k))
+				   (.get c (mk-key bucket k)))]
 		    (-> val .getBytes from-bytes))))
 	   (bucket-put [this k v]
 		(with-jedis-client jedis-pool c pool-timeout retry-count
@@ -73,7 +74,7 @@
 
 (defn- validate-fs-key [s]
   (when (re-seq #"s+" s)
-    (throw (RuntimeException. "FS key cannot contain spaces"))))
+    (throw (RuntimeException. (str "FS key cannot contain spaces: " s)))))
 
 (defn fs-bucket [dir-path]
   ; ensure directory exists
@@ -86,7 +87,6 @@
 	 (bucket-put [this k v]
 		     (validate-fs-key k)
 		     (let [f (java.io.File. dir-path (encode-fs-str k))]
-		       (.delete f)
 		       (freeze f v)))
 	 (bucket-exists? [this k]
 			 (validate-fs-key k)
@@ -110,8 +110,8 @@
 		(.put h k (to-bytes v)))
 	   (bucket-keys [this] (enumeration-seq (.keys h)))
 	   (bucket-get [this k]
-		       (when-let [v (.get h k)]
-			 (from-bytes v)))
+	      (when-let [v (.get h k)]
+		(from-bytes v)))
 	   (bucket-delete [this k]
 		   (.remove h k))
 	   (bucket-exists? [this k]
