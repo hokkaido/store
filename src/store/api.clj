@@ -78,23 +78,24 @@
 
 (defn fs-bucket [dir-path]
   ; ensure directory exists
-  (-> dir-path java.io.File. .mkdirs)
+  (with-open [f (java.io.File. dir-path)]
+    (.mkdirs f))
   (reify IBucket
 	 (bucket-get [this k]
 		     (validate-fs-key k)
-		     (let [f (java.io.File. dir-path (encode-fs-str k))]
+		     (with-open [f (java.io.File. dir-path (encode-fs-str k))]
 		       (when (.exists f) (thaw f))))
 	 (bucket-put [this k v]
 		     (validate-fs-key k)
-		     (let [f (java.io.File. dir-path (encode-fs-str k))]
+		     (with-open [f (java.io.File. dir-path (encode-fs-str k))]
 		       (freeze f v)))
 	 (bucket-exists? [this k]
 			 (validate-fs-key k)
-			 (let [f (java.io.File. dir-path (encode-fs-str k))]
+			 (with-open [f (java.io.File. dir-path (encode-fs-str k))]
 			   (.exists f)))
 	 (bucket-delete [this k]
 			(validate-fs-key k)
-			(let [f (java.io.File. dir-path (encode-fs-str k))]
+			(with-open [f (java.io.File. dir-path (encode-fs-str k))]
 			  (.delete f)))
 	 (bucket-keys [this]
 		      (for [f (.listFiles (java.io.File. dir-path))]
