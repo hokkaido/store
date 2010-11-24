@@ -1,5 +1,6 @@
 (ns store.api
-  (:require [clomert :as v])
+  (:require [clomert :as v]
+	    [ring.util.codec :as ring])
   (:use store.s3
         store.core
 	[clojure.string :only [escape]]
@@ -64,42 +65,27 @@
 
 ;; File System
 
-(defn- encode-fs-str [s]
-  (-> (str s)
-      (.replaceAll (str (java.io.File/separatorChar)) "#sep#")))
-
-(defn- decode-fs-str [s]
-  (-> (str s)
-      (.replaceAll "#sep#" (str (java.io.File/separatorChar)))))
-
-(defn- validate-fs-key [s]
-  (when (re-seq #"s+" s)
-    (throw (RuntimeException. (str "FS key cannot contain spaces: " s)))))
 
 (defn fs-bucket [dir-path]
   ; ensure directory exists
-  (with-open [f (java.io.File. dir-path)]
+  (let [f (java.io.File. dir-path)]
     (.mkdirs f))
   (reify IBucket
 	 (bucket-get [this k]
-		     (validate-fs-key k)
-		     (with-open [f (java.io.File. dir-path (encode-fs-str k))]
+		     (let [f (java.io.File. dir-path (ring/url-encode k))]
 		       (when (.exists f) (thaw f))))
 	 (bucket-put [this k v]
-		     (validate-fs-key k)
-		     (with-open [f (java.io.File. dir-path (encode-fs-str k))]
+		     (let [f (java.io.File. dir-path (ring/url-encode k))]
 		       (freeze f v)))
-	 (bucket-exists? [this k]
-			 (validate-fs-key k)
-			 (with-open [f (java.io.File. dir-path (encode-fs-str k))]
+	 (bucket-exists? [this k]		
+			 (let [f (java.io.File. dir-path (ring/url-encode k))]
 			   (.exists f)))
 	 (bucket-delete [this k]
-			(validate-fs-key k)
-			(with-open [f (java.io.File. dir-path (encode-fs-str k))]
+			(let [f (java.io.File. dir-path (ring/url-encode  k))]
 			  (.delete f)))
 	 (bucket-keys [this]
 		      (for [f (.listFiles (java.io.File. dir-path))]
-			(decode-fs-str (.getName f))))))
+			(ring/url-decode (.getName f))))))
 
 ;; ConcurrentHashMap
 
