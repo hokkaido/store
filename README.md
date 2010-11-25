@@ -127,3 +127,11 @@ But one noticeable difference is that, for Voldemort, we use a cache of stores i
         (let [c (v/make-store-client factory client)]
           (.put m client c)
           c)))))
+
+## Sponsors
+
+YourKit is kindly supporting open source projects with its full-featured Java Profiler.
+YourKit, LLC is the creator of innovative and intelligent tools for profiling
+Java and .NET applications. Take a look at YourKit's leading software products:
+[YourKit Java Profiler](http://www.yourkit.com/java/profiler/index.jsp) and
+[YourKit .NET Profiler](http://www.yourkit.com/.net/profiler/index.jsp).
