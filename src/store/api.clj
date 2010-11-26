@@ -1,11 +1,11 @@
 (ns store.api
   (:require [clomert :as v]
-	    [ring.util.codec :as ring])
+            [ring.util.codec :as ring])
   (:use store.s3
         store.core
-	[clojure.string :only [escape]]
-	[plumbing.freezer :only [freeze thaw to-bytes from-bytes]]
-	[plumbing.core :only [retry -?> try-silent rpartial]])
+        [clojure.string :only [escape]]
+        [plumbing.freezer :only [freeze thaw to-bytes from-bytes]]
+        [plumbing.core :only [retry -?> try-silent rpartial]])
   (:import [java.util.concurrent ConcurrentHashMap TimeoutException]
            [redis.clients.jedis JedisPool Jedis]))
 
@@ -32,60 +32,60 @@
   [^String bucket &
    {:keys [host,port,timeout,pool-timeout,retry-count,num-clients]
     :or {host "127.0.0.1"
-	 port 6379
-	 timeout 50
-	 pool-timeout 50
-	 retry-count 10
-	 num-clients 20}
+         port 6379
+         timeout 50
+         pool-timeout 50
+         retry-count 10
+         num-clients 20}
     :as spec}]
   (let [jedis-pool (doto (JedisPool. ^String host ^int port timeout)
-		     (.setResourcesNumber ^int num-clients)
-		     (.init))]
+                     (.setResourcesNumber ^int num-clients)
+                     (.init))]
     (reify IBucket
-	   (bucket-get [this k]
-		(with-jedis-client jedis-pool c pool-timeout retry-count
-		  (when-let [val (when (.exists c (mk-key bucket k))
-				   (.get c (mk-key bucket k)))]
-		    (-> val .getBytes from-bytes))))
-	   (bucket-put [this k v]
-		(with-jedis-client jedis-pool c pool-timeout retry-count
-		  (.set c (mk-key bucket k) (-> v to-bytes (String.)))
-		  nil))
-	   (bucket-keys [this]
-		 (with-jedis-client jedis-pool c pool-timeout retry-count
-		   (let [prefix-ln (inc (.length bucket))]
-		     (doall (map #(.substring % prefix-ln)
-				 (.keys c (format "%s:*" bucket)))))))
-	   (bucket-delete [this k]
-		   (with-jedis-client jedis-pool c pool-timeout retry-count
-		     (.del c (into-array [(mk-key bucket k)]))))
-	   (bucket-exists? [this k]
-		    (with-jedis-client jedis-pool c pool-timeout retry-count
-		      (.exists c (mk-key bucket k)))))))
+           (bucket-get [this k]
+                       (with-jedis-client jedis-pool c pool-timeout retry-count
+                         (when-let [val (when (.exists c (mk-key bucket k))
+                                          (.get c (mk-key bucket k)))]
+                           (-> val .getBytes from-bytes))))
+           (bucket-put [this k v]
+                       (with-jedis-client jedis-pool c pool-timeout retry-count
+                         (.set c (mk-key bucket k) (-> v to-bytes (String.)))
+                         nil))
+           (bucket-keys [this]
+                        (with-jedis-client jedis-pool c pool-timeout retry-count
+                          (let [prefix-ln (inc (.length bucket))]
+                            (doall (map #(.substring % prefix-ln)
+                                        (.keys c (format "%s:*" bucket)))))))
+           (bucket-delete [this k]
+                          (with-jedis-client jedis-pool c pool-timeout retry-count
+                            (.del c (into-array [(mk-key bucket k)]))))
+           (bucket-exists? [this k]
+                           (with-jedis-client jedis-pool c pool-timeout retry-count
+                             (.exists c (mk-key bucket k)))))))
 
 ;; File System
 
 
 (defn fs-bucket [dir-path]
-  ; ensure directory exists
+                                        ; ensure directory exists
   (let [f (java.io.File. dir-path)]
     (.mkdirs f))
   (reify IBucket
-	 (bucket-get [this k]
-		     (let [f (java.io.File. dir-path (ring/url-encode k))]
-		       (when (.exists f) (thaw f))))
-	 (bucket-put [this k v]
-		     (let [f (java.io.File. dir-path (ring/url-encode k))]
-		       (freeze f v)))
-	 (bucket-exists? [this k]		
-			 (let [f (java.io.File. dir-path (ring/url-encode k))]
-			   (.exists f)))
-	 (bucket-delete [this k]
-			(let [f (java.io.File. dir-path (ring/url-encode  k))]
-			  (.delete f)))
-	 (bucket-keys [this]
-		      (for [f (.listFiles (java.io.File. dir-path))]
-			(ring/url-decode (.getName f))))))
+         (bucket-get [this k]
+                     (let [f (java.io.File. dir-path (ring/url-encode k))]
+                       (when (.exists f) (thaw f))))
+         (bucket-put [this k v]
+                     (let [f (java.io.File. dir-path (ring/url-encode k))]
+                       (freeze f v)))
+         (bucket-exists? [this k]		
+                         (let [f (java.io.File. dir-path (ring/url-encode k))]
+                           (.exists f)))
+         (bucket-delete [this k]
+                        (let [f (java.io.File. dir-path (ring/url-encode  k))]
+                          (.delete f)))
+         (bucket-keys [this]
+                      (for [f (.listFiles (java.io.File. dir-path))]
+                        (ring/url-decode (.getName f))))))
 
 ;; ConcurrentHashMap
 
@@ -93,16 +93,16 @@
   []
   (let [h (ConcurrentHashMap.)]
     (reify IBucket
-	   (bucket-put [this k v]
-		(.put h k (to-bytes v)))
-	   (bucket-keys [this] (enumeration-seq (.keys h)))
-	   (bucket-get [this k]
-	      (when-let [v (.get h k)]
-		(from-bytes v)))
-	   (bucket-delete [this k]
-		   (.remove h k))
-	   (bucket-exists? [this k]
-			   (.containsKey h k)))))
+           (bucket-put [this k v]
+                       (.put h k (to-bytes v)))
+           (bucket-keys [this] (enumeration-seq (.keys h)))
+           (bucket-get [this k]
+                       (when-let [v (.get h k)]
+                         (from-bytes v)))
+           (bucket-delete [this k]
+                          (.remove h k))
+           (bucket-exists? [this k]
+                           (.containsKey h k)))))
 
 ;; S3
 
@@ -111,32 +111,32 @@
   bucket name to actual S3 bucket name."
   [s3 bucket-name]
   (reify IBucket
-	 (bucket-put [this k v]
-	    (try-silent (put-clj s3 bucket-name (str k) v)))
-	 (bucket-keys [this]
-	    (try-silent (get-keys s3 bucket-name)))
-	 (bucket-get [this k]
-	    (try-silent (get-clj s3 bucket-name (str k))))
-	 (bucket-delete [this k]
-	    (try-silent (delete-object s3 bucket-name (str k))))	 
-	 (bucket-exists? [this k]
-	    (some #(= k (.getKey %))
-		  (-?> s3 (objects bucket-name (str k)) seq)))))
+         (bucket-put [this k v]
+                     (try-silent (put-clj s3 bucket-name (str k) v)))
+         (bucket-keys [this]
+                      (try-silent (get-keys s3 bucket-name)))
+         (bucket-get [this k]
+                     (try-silent (get-clj s3 bucket-name (str k))))
+         (bucket-delete [this k]
+                        (try-silent (delete-object s3 bucket-name (str k))))	 
+         (bucket-exists? [this k]
+                         (some #(= k (.getKey %))
+                               (-?> s3 (objects bucket-name (str k)) seq)))))
 
 ;; Generic Buckets
 
 (defn read-write-bucket [read-bucket-impl write-bucket-impl]
   (reify IBucket
-	 (bucket-get [this k]
-	      (bucket-get read-bucket-impl k))
-	 (bucket-put [this k v]
-	      (bucket-put write-bucket-impl k v))	 
-	 (bucket-exists? [this k]
-		  (bucket-exists? read-bucket-impl k))
-	 (bucket-delete [this k]
-		 (bucket-delete write-bucket-impl k))
-	 (bucket-keys [this]
-		      (bucket-keys read-bucket-impl))))
+         (bucket-get [this k]
+                     (bucket-get read-bucket-impl k))
+         (bucket-put [this k v]
+                     (bucket-put write-bucket-impl k v))	 
+         (bucket-exists? [this k]
+                         (bucket-exists? read-bucket-impl k))
+         (bucket-delete [this k]
+                        (bucket-delete write-bucket-impl k))
+         (bucket-keys [this]
+                      (bucket-keys read-bucket-impl))))
 
 (defn copy-bucket [src dst]
   (doseq [k (bucket-keys src)]
@@ -160,13 +160,13 @@
 
 (defn- default-store-op [bucket-map default-bucket-fn op bucket & args]
   (let [bucket-impl (or (@bucket-map bucket)
-			((swap! bucket-map assoc bucket (default-bucket-fn bucket)) bucket))
-	bucket-op (case op
-			:get bucket-get
-			:put bucket-put
-			:keys bucket-keys
-			:exists? bucket-exists?
-			:delete bucket-delete)]
+                        ((swap! bucket-map assoc bucket (default-bucket-fn bucket)) bucket))
+        bucket-op (case op
+                        :get bucket-get
+                        :put bucket-put
+                        :keys bucket-keys
+                        :exists? bucket-exists?
+                        :delete bucket-delete)]
     (apply bucket-op bucket-impl args)))
 
 (deftype Store [bucket-map default-bucket-fn]
@@ -174,28 +174,28 @@
   clojure.lang.Associative
   (assoc [this bucket bucket-impl]
     (Store.
-      (atom (assoc @bucket-map bucket bucket-impl))
-      default-bucket-fn))
+     (atom (assoc @bucket-map bucket bucket-impl))
+     default-bucket-fn))
 
   clojure.lang.Seqable
   (seq [this]
        (for [bucket-key @bucket-map]
-	  [bucket-key (@bucket-map bucket-key)]))
+         [bucket-key (@bucket-map bucket-key)]))
 
   clojure.lang.IFn
   (invoke [this op bucket]
-	  (default-store-op bucket-map default-bucket-fn op bucket))
+          (default-store-op bucket-map default-bucket-fn op bucket))
   (invoke [this op bucket key]
-	  (default-store-op bucket-map default-bucket-fn op bucket key))
+          (default-store-op bucket-map default-bucket-fn op bucket key))
   (invoke [this op bucket key value]
-	  (default-store-op bucket-map default-bucket-fn op bucket key value)))
+          (default-store-op bucket-map default-bucket-fn op bucket key value)))
 
 (defn copy-store [src ^Store dst]
   (reduce (fn [res [bucket-key bucket] src]
-	    (assoc res bucket-key
-		   (copy-bucket bucket (.default-bucket-fn dst bucket-key))))
-	  dst
-	  src))
+            (assoc res bucket-key
+                   (copy-bucket bucket (.default-bucket-fn dst bucket-key))))
+          dst
+          src))
 
 ;; Create Store
 
@@ -227,8 +227,8 @@
 (defn mk-s3-store
   [s3 bucket-name-map]
   (Store. (atom {})
-	  (fn [local-bucket-name]
-	    (s3-bucket (bucket-name-map local-bucket-name)))))
+          (fn [local-bucket-name]
+            (s3-bucket (bucket-name-map local-bucket-name)))))
 
 
 ;;; Old stuff below, swapping out as soon as all code is moved over to use new store buckets.
