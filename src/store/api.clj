@@ -5,7 +5,7 @@
         store.core
         [clojure.string :only [escape]]
         [plumbing.freezer :only [freeze thaw to-bytes from-bytes]]
-        [plumbing.core :only [retry -?> try-silent rpartial]])
+        [plumbing.core :only [find-first map-from-keys retry -?> try-silent rpartial]])
   (:import [java.util.concurrent ConcurrentHashMap TimeoutException]
            [redis.clients.jedis JedisPool Jedis]))
 
@@ -27,9 +27,14 @@
 
 (defn- mk-key [bucket key] (format "%s:%s" bucket key))
 
+(defn- default-bucket-exists? [b k]
+  (find-first
+   (partial = k)
+   (bucket-keys b)))
+
 (defn redis-bucket
   "returns callback fn for a Redis backed bucketbucket"
-  [^String bucket &
+  [^String bucket 
    {:keys [host,port,timeout,pool-timeout,retry-count,num-clients]
     :or {host "127.0.0.1"
          port 6379
@@ -59,15 +64,15 @@
            (bucket-delete [this k]
                           (with-jedis-client jedis-pool c pool-timeout retry-count
                             (.del c (into-array [(mk-key bucket k)]))))
-           (bucket-exists? [this k]
-                           (with-jedis-client jedis-pool c pool-timeout retry-count
+           (bucket-exists? [this k] (default-bucket-exists? this k)
+                           #_(with-jedis-client jedis-pool c pool-timeout retry-count
                              (.exists c (mk-key bucket k)))))))
 
 ;; File System
 
 
 (defn fs-bucket [dir-path]
-                                        ; ensure directory exists
+  ; ensure directory exists
   (let [f (java.io.File. dir-path)]
     (.mkdirs f))
   (reify IBucket
@@ -112,20 +117,22 @@
   [s3 bucket-name]
   (reify IBucket
          (bucket-put [this k v]
-                     (try-silent (put-clj s3 bucket-name (str k) v)))
+		     (put-clj s3 bucket-name (str k) v))
          (bucket-keys [this]
-                      (try-silent (get-keys s3 bucket-name)))
+		      (get-keys s3 bucket-name))
          (bucket-get [this k]
-                     (try-silent (get-clj s3 bucket-name (str k))))
+		     (get-clj s3 bucket-name (str k)))
          (bucket-delete [this k]
-                        (try-silent (delete-object s3 bucket-name (str k))))	 
+			(delete-object s3 bucket-name (str k)))	 
          (bucket-exists? [this k]
                          (some #(= k (.getKey %))
                                (-?> s3 (objects bucket-name (str k)) seq)))))
 
 ;; Generic Buckets
 
-(defn read-write-bucket [read-bucket-impl write-bucket-impl]
+(defn read-write-bucket
+  "make a bucket which uses the read-interface of one bucket and the write of the other"
+  [read-bucket-impl write-bucket-impl]
   (reify IBucket
          (bucket-get [this k]
                      (bucket-get read-bucket-impl k))
@@ -142,70 +149,18 @@
   (doseq [k (bucket-keys src)]
     (bucket-put dst k (bucket-get src k))))
 
-;; (def serialize-obj
-;;      (let [class-to-ctor (atom {})]
-;;        (fn [o]
-;; 	 (serialize-obj o))))
-
-;; (defn serialize-bucket [class]
-;;   (let [^java.lang.Constructor ctor (first (sort-by #(-> % .getParameterTypes .length) (.getConstructors class)))
-;; 	num-args (-> ctor .getParameterTypes .length)
-;; 	create (fn [m]
-;; 		 (into (.newInstance)))]
-;;     (reify IBucket
-;; 	   (bucket-get [this key]
-;; 		       ))))
-
-;; Store 
-
-(defn- default-store-op [bucket-map default-bucket-fn op bucket & args]
-  (let [bucket-impl (or (@bucket-map bucket)
-                        ((swap! bucket-map assoc bucket (default-bucket-fn bucket)) bucket))
-        bucket-op (case op
+(defn mk-store [bucket-map]
+  (fn [op bucket-name & args]
+    (let [bucket (bucket-map bucket-name)
+	  bucket-op (case op
                         :get bucket-get
                         :put bucket-put
                         :keys bucket-keys
                         :exists? bucket-exists?
                         :delete bucket-delete)]
-    (apply bucket-op bucket-impl args)))
-
-(deftype Store [bucket-map default-bucket-fn]
-
-  clojure.lang.Associative
-  (assoc [this bucket bucket-impl]
-    (Store.
-     (atom (assoc @bucket-map bucket bucket-impl))
-     default-bucket-fn))
-
-  clojure.lang.Seqable
-  (seq [this]
-       (for [bucket-key @bucket-map]
-         [bucket-key (@bucket-map bucket-key)]))
-
-  clojure.lang.IFn
-  (invoke [this op bucket]
-          (default-store-op bucket-map default-bucket-fn op bucket))
-  (invoke [this op bucket key]
-          (default-store-op bucket-map default-bucket-fn op bucket key))
-  (invoke [this op bucket key value]
-          (default-store-op bucket-map default-bucket-fn op bucket key value)))
-
-(defn copy-store [src ^Store dst]
-  (reduce (fn [res [bucket-key bucket] src]
-            (assoc res bucket-key
-                   (copy-bucket bucket (.default-bucket-fn dst bucket-key))))
-          dst
-          src))
-
-;; Create Store
-
-(defn mk-store
-  "mk-store by default uses an empty
-   bucket binding and concurrent hashmap
-   implementations"
-  ([default-bucket-fn]
-     (Store. (atom {}) default-bucket-fn))
-  ([] (mk-store (fn [_] (hashmap-bucket)))))
+      (when (nil? bucket)
+	(throw (RuntimeException. (format "Bucket doesn't exist: %s" bucket-name))))
+      (apply bucket-op bucket args))))
 
 (def default-redis-config
      {:host "127.0.0.1"
@@ -220,115 +175,16 @@
    is redis with a given server spec.
 
    See redis-bucket for docmentation about keys in spec"
-  ([spec]
-     (Store. (atom {}) (fn [bucket] (apply redis-bucket bucket (flatten spec)))))
-  ([] (mk-redis-store default-redis-config)))
+  ([bucket-names spec]
+     (mk-store (map-from-keys
+		(fn [b] (redis-bucket b spec))
+		bucket-names)))
+  ([bucket-names] (mk-redis-store bucket-names default-redis-config)))
 
-(defn mk-s3-store
-  [s3 bucket-name-map]
-  (Store. (atom {})
-          (fn [local-bucket-name]
-            (s3-bucket (bucket-name-map local-bucket-name)))))
+(defn mk-hashmap-store
+  [bucket-names]
+  (mk-store (map-from-keys (fn [b] (hashmap-bucket)) bucket-names)))
 
-
-;;; Old stuff below, swapping out as soon as all code is moved over to use new store buckets.
-
-
-
-;; (defn mk-store [s3 & [m]]
-;;   (let [m (or m identity)]
-;;     (obj {:put (fn [b v k]
-;;                  (try-default nil put-clj s3 (m b) (str k) v))
-;;           :keys (fn [b]
-;;                   (try-default nil
-;;                                get-keys s3 (m b)))
-;;           :get (fn [b k]
-;;                  (try-default nil
-;;                               get-clj s3 (m b) (str k)))
-;;           :update (fn [b v k]
-;;                     (try-default nil
-;;                                  append-clj s3 (m b) (str k) v))
-;;           :delete (fn [b k]
-;;                     (try-default nil
-;;                                  delete-object s3 (m b) (str k)))
-
-;;           :exists? (fn [b k]
-;;                      (or (some #(= k (.getKey %))
-;;                                (try-default nil
-;;                                             (comp seq objects)
-;;                                             s3 (m b) (str k)))
-;;                          false))})))
-
-;; (defn mk-store-cache [config]
-;;   (let [factory (v/make-socket-store-client-factory
-;;                  (v/make-client-config config))
-;;         m (ConcurrentHashMap.)]
-;;     (fn [client]
-;;       (if-let [c (get m client)]
-;;         c
-;;         (let [c (v/make-store-client factory client)]
-;;           (.put m client c)
-;;           c)))))
-
-;; (defn mk-rstore
-;;   "Redis store."
-;;   [{host :host
-;;     port :port
-;;     timeout :timeout}
-;;    keyspaces
-;;    & {:keys [pool-timeout retry-count num-clients] :or {:pool-timeout 50
-;;                                                         :retry-count 10
-;;                                                         :num-clients 20}}]
-;;   (let [mk-key #(format "%s:%s" %1 %2)
-;;         ^JedisPool jedis-pool (doto (JedisPool. host port timeout)
-;;                                 ;; Was getting NPE below
-;;                                 ;; (.setResourcesNumber num-clients)
-;;                                 (.init))
-;;         keyspaces (apply hash-set keyspaces)
-;;         ensure-valid-name (fn [f]
-;;                             (fn [n & args]
-;;                               (if (contains? keyspaces n)
-;;                                 (apply f (cons n args))
-;;                                 (throw (Exception. (format "Invalid store name, %s" n))))))]
-;;     (obj {:put (-> (fn [n v k]
-;;                      (with-jedis-client jedis-pool c pool-timeout retry-count
-;;                        (.set c (mk-key n k) (pr-str v))))
-;;                    ensure-valid-name)
-;;           :keys (-> (fn [n]
-;;                       (with-jedis-client jedis-pool c pool-timeout retry-count
-;;                         (let [prefix-ln (inc (.length n))]
-;;                           (doall (map #(.substring % prefix-ln)
-;;                                       (.keys c (format "%s:*" n)))))))
-;;                     ensure-valid-name)
-;;           :get (-> (fn [n k]
-;;                      (with-jedis-client jedis-pool c pool-timeout retry-count
-;;                        (if-let [val (.get c (mk-key n k))]
-;;                          (read-string val)
-;;                          nil)))
-;;                    ensure-valid-name)
-;;           :delete (-> (fn [n k]
-;;                         (with-jedis-client jedis-pool c pool-timeout retry-count
-;;                           (.del c (into-array [(mk-key n k)]))))
-;;                       ensure-valid-name)
-;;           :exists? (-> (fn [n k]
-;;                          (with-jedis-client jedis-pool c pool-timeout retry-count
-;;                            (.exists c (mk-key n k))))
-;;                        ensure-valid-name)})))
-
-;; (defn mk-chmstore
-;;   [store-names]
-;;   (let [stores (zipmap store-names
-;;                        (repeatedly (ConcurrentHashMap.)))]
-;;     (obj {:put (fn [n v k]
-;;                  (.put (stores n) k v))
-;;           :keys (fn [n]
-;;                   (enumeration-seq (.keys (stores n))))
-;;           :get (fn [n k]
-;;                  (.get (stores n) k))
-;;           :delete (fn [n k]
-;;                     (.remove (stores n) k))
-;;           :exists? (fn [n k]
-;;                      (.containsKey (stores n) k))})))
 
 ;; (defn mk-vstore
 ;;   [stores]
@@ -356,5 +212,3 @@
 ;; 		   (stores (str bucket))
 ;; 		   (:delete k)))}))
 ;;TODO: :exists? :keys
-
-;;(mk-vstore (mk-store-cache {:bootstrap-urls "tcp://localhost:6666"}))

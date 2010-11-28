@@ -1,16 +1,52 @@
 (ns store.core-test
   (:use clojure.test
-	store.api))
+	store.api
+	[plumbing.core :only [find-first]]))
 
-(deftest basic-store-test
-  (let [s (mk-store)]
-    (s :put "b1" "k1" "v1")
-    (is (= (s :get "b1" "k1") "v1"))
-    (is (= ["k1"] (s :keys "b1")))))
+(defn generic-bucket-test [b]
+    (bucket-put b "k1" "v1")
+    (is (= (bucket-get b "k1") "v1"))
+    (is (find-first (partial = "k1") (bucket-keys b)))
+    (is (bucket-exists? b "k1"))
+    (bucket-delete b "k1")
+    (is (not (bucket-exists? b "k1"))))
 
-(deftest asoc-store-test
+(defn generic-store-test [mk-store]
+  (let [s (mk-store ["b1","b2","b3"])
+	f (partial s :get)]
+    (s :put "b1" "k" "v")
+    (is (= (f "b1" "k") "v"))
+    (is (= ["k"] (s :keys "b1")))
+    (s :delete "b1" "k")
+    (is (empty? (s :keys "b1")))))
+
+(deftest hashmap-bucket-test
+  (generic-bucket-test (hashmap-bucket)))
+
+(deftest fs-bucket-test
+  (generic-bucket-test (fs-bucket (.getAbsolutePath (java.io.File. ".")))))
+
+(deftest redis-bucket-test
+  (generic-bucket-test (redis-bucket "b" default-redis-config)))
+
+(deftest hashmap-store-test
+  (generic-store-test mk-hashmap-store)
+  (let [s (mk-store {"b1" (hashmap-bucket)})]
+    (s :put "b1" "k" "v")    
+    (is (= ["k"] (s :keys "b1")))
+    (is (= "v" (s :get "b1" "k")))))
+
+(deftest fs-store-test
   (let [root (java.io.File. ".")
-	s (-> (mk-store) (assoc "fs" (fs-bucket (.getAbsolutePath root))))]
+	s (-> (mk-store {"fs" (fs-bucket (.getAbsolutePath root))}) )]
     (s :put "fs" "my-key" 2)
+    (is (.exists (java.io.File. root "my-key")))
     (is (= (s :get "fs" "my-key") 2))
-    (s :delete "fs" "my-key")))
+    (s :delete "fs" "my-key")
+    (is (not (.exists (java.io.File. root "my-key"))))))
+
+(deftest redis-store-test
+  (generic-store-test mk-redis-store)
+  (let [s (mk-redis-store ["b1" "b2"])]
+    (s :put "b1" "k" "v")
+    (is (= "v" (s :get "b1" "k")))))
