@@ -3,8 +3,6 @@
             [ring.util.codec :as ring])
   (:use store.s3
         store.core
-        [clojure.string :only [escape]]
-        [plumbing.freezer :only [freeze thaw to-bytes from-bytes]]
         [plumbing.core :only [find-first map-from-keys retry -?> try-silent rpartial]])
   (:import [java.util.concurrent ConcurrentHashMap TimeoutException]
            [redis.clients.jedis JedisPool Jedis]))
@@ -23,6 +21,7 @@
   `(let [~(with-meta (symbol cname) {:tag Jedis}) (.getResource ~pool ~client-timeout)]
      (retry ~retry-count
             (fn [] (try ~@body
+			(catch Exception e# (.printStackTrace e#))
                         (finally (.returnResource ~pool ~cname)))))))
 
 (defn- mk-key [bucket key] (format "%s:%s" bucket key))
@@ -32,41 +31,45 @@
    (partial = k)
    (bucket-keys b)))
 
+
+(defn- ensure-jedis-pool [jedis-pool  host  port timeout  num-clients]
+  (when (nil? @jedis-pool)
+    (swap! jedis-pool (constantly
+		       (doto (JedisPool. ^String host ^int port timeout)
+			 (.setResourcesNumber ^int num-clients)
+			 (.init))))))
+
 (defn redis-bucket
   "returns callback fn for a Redis backed bucketbucket"
-  [^String bucket 
-   {:keys [host,port,timeout,pool-timeout,retry-count,num-clients]
-    :or {host "127.0.0.1"
-         port 6379
-         timeout 50
-         pool-timeout 50
-         retry-count 10
-         num-clients 20}
-    :as spec}]
-  (let [jedis-pool (doto (JedisPool. ^String host ^int port timeout)
-                     (.setResourcesNumber ^int num-clients)
-                     (.init))]
-    (reify IBucket
-           (bucket-get [this k]
-                       (with-jedis-client jedis-pool c pool-timeout retry-count
-                         (when-let [val (when (.exists c (mk-key bucket k))
-                                          (.get c (mk-key bucket k)))]
-                           (-> val .getBytes from-bytes))))
-           (bucket-put [this k v]
-                       (with-jedis-client jedis-pool c pool-timeout retry-count
-                         (.set c (mk-key bucket k) (-> v to-bytes (String.)))
-                         nil))
-           (bucket-keys [this]
-                        (with-jedis-client jedis-pool c pool-timeout retry-count
-                          (let [prefix-ln (inc (.length bucket))]
-                            (doall (map #(.substring % prefix-ln)
-                                        (.keys c (format "%s:*" bucket)))))))
-           (bucket-delete [this k]
-                          (with-jedis-client jedis-pool c pool-timeout retry-count
-                            (.del c (into-array [(mk-key bucket k)]))))
-           (bucket-exists? [this k] (default-bucket-exists? this k)
-                           #_(with-jedis-client jedis-pool c pool-timeout retry-count
-                             (.exists c (mk-key bucket k)))))))
+  ([^String bucket 
+    {:keys [host,port,timeout,pool-timeout,retry-count,num-clients]
+     :as spec}]
+     (let [jedis-pool (atom nil)]
+       (reify IBucket
+	      (bucket-get [this k]
+		  (ensure-jedis-pool jedis-pool host port timeout num-clients)	  
+		  (with-jedis-client @jedis-pool c pool-timeout retry-count
+		    (when-let [v (.get c (mk-key bucket k))]
+		      (read-string v))))
+	      (bucket-put [this k v]
+		  (ensure-jedis-pool jedis-pool host port timeout num-clients)	  
+		  (with-jedis-client @jedis-pool c pool-timeout retry-count
+		    (.set c (mk-key bucket k) (pr-str v))))
+	      (bucket-keys [this]
+		  (ensure-jedis-pool jedis-pool host port timeout num-clients)	  
+		   (with-jedis-client @jedis-pool c pool-timeout retry-count
+		     (let [prefix-ln (inc (.length bucket))]
+		       (doall (map #(.substring % prefix-ln)
+				   (.keys c (format "%s:*" bucket)))))))
+	      (bucket-delete [this k]
+		  (ensure-jedis-pool jedis-pool host port timeout num-clients)	  
+		  (with-jedis-client @jedis-pool c pool-timeout retry-count
+		    (.del c (into-array [(mk-key bucket k)]))))
+	      (bucket-exists? [this k]
+		  (ensure-jedis-pool jedis-pool host port timeout num-clients)	  
+		  (default-bucket-exists? this k)
+			      #_(with-jedis-client @jedis-pool c pool-timeout retry-count
+				  (.exists c (mk-key bucket k))))))))
 
 ;; File System
 
@@ -78,10 +81,10 @@
   (reify IBucket
          (bucket-get [this k]
                      (let [f (java.io.File. dir-path (ring/url-encode k))]
-                       (when (.exists f) (thaw f))))
+                       (when (.exists f) (-> f slurp read-string))))
          (bucket-put [this k v]
                      (let [f (java.io.File. dir-path (ring/url-encode k))]
-                       (freeze f v)))
+                       (spit f (pr-str v))))
          (bucket-exists? [this k]		
                          (let [f (java.io.File. dir-path (ring/url-encode k))]
                            (.exists f)))
@@ -99,11 +102,9 @@
   (let [h (ConcurrentHashMap.)]
     (reify IBucket
            (bucket-put [this k v]
-                       (.put h k (to-bytes v)))
+                       (.put h k (pr-str v)))
            (bucket-keys [this] (enumeration-seq (.keys h)))
-           (bucket-get [this k]
-                       (when-let [v (.get h k)]
-                         (from-bytes v)))
+           (bucket-get [this k] (read-string (.get h k)))
            (bucket-delete [this k]
                           (.remove h k))
            (bucket-exists? [this k]
@@ -162,13 +163,14 @@
 	(throw (RuntimeException. (format "Bucket doesn't exist: %s" bucket-name))))
       (apply bucket-op bucket args))))
 
+; This is for a single bucket, so only a single client per-bucket
 (def default-redis-config
      {:host "127.0.0.1"
       :port 6379
       :timeout 0
       :pool-timeout 500
       :retry-count 20
-      :num-clients 20})
+      :num-clients 5})
 
 (defn mk-redis-store
   "A store where default bucket implementations
