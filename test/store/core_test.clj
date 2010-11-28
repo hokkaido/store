@@ -9,7 +9,11 @@
     (is (find-first (partial = "k1") (bucket-keys b)))
     (is (bucket-exists? b "k1"))
     (bucket-delete b "k1")
-    (is (not (bucket-exists? b "k1"))))
+    (is (not (bucket-exists? b "k1")))
+    (bucket-put b "k2" {:a 1})
+    (is (= 1 (-> b (bucket-get "k2") :a)))
+    (bucket-put b "k2" 2)
+    (is (= 2 (bucket-get b "k2"))))
 
 (defn generic-store-test [mk-store]
   (let [s (mk-store ["b1","b2","b3"])
@@ -18,7 +22,9 @@
     (is (= (f "b1" "k") "v"))
     (is (= ["k"] (s :keys "b1")))
     (s :delete "b1" "k")
-    (is (empty? (s :keys "b1")))))
+    (is (empty? (s :keys "b1")))
+    (s :put "b2" "k2" {:a 1})
+    (is (= 1 (:a (s :get "b2" "k2"))))))
 
 (deftest hashmap-bucket-test
   (generic-bucket-test (hashmap-bucket)))

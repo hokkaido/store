@@ -31,7 +31,6 @@
    (partial = k)
    (bucket-keys b)))
 
-
 (defn- ensure-jedis-pool [jedis-pool  host  port timeout  num-clients]
   (when (nil? @jedis-pool)
     (swap! jedis-pool (constantly
