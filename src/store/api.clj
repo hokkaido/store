@@ -2,8 +2,7 @@
   (:require [clomert :as v]
             [ring.util.codec :as ring])
   (:use store.s3
-        store.core
-        [plumbing.core :only [find-first map-from-keys retry -?> try-silent rpartial]])
+        [plumbing.core])
   (:import [java.util.concurrent ConcurrentHashMap TimeoutException]
            [redis.clients.jedis JedisPool Jedis]))
 
@@ -16,14 +15,6 @@
 
 ;; Redis
 
-(defmacro with-jedis-client
-  [^JedisPool pool cname client-timeout retry-count & body]
-  `(let [~(with-meta (symbol cname) {:tag Jedis}) (.getResource ~pool ~client-timeout)]
-     (retry ~retry-count
-            (fn [] (try ~@body
-			(catch Exception e# (.printStackTrace e#))
-                        (finally (.returnResource ~pool ~cname)))))))
-
 (defn- mk-key [bucket key] (format "%s:%s" bucket key))
 
 (defn- default-bucket-exists? [b k]
@@ -33,10 +24,18 @@
 
 (defn- ensure-jedis-pool [jedis-pool  host  port timeout  num-clients]
   (when (nil? @jedis-pool)
-    (swap! jedis-pool (constantly
-		       (doto (JedisPool. ^String host ^int port timeout)
+    (swap! jedis-pool (fn [_] (doto (JedisPool. ^String host ^int port timeout)
 			 (.setResourcesNumber ^int num-clients)
 			 (.init))))))
+
+(defn with-jedis-client
+  [^JedisPool pool client-timeout retry-count f]  
+  (when-let [c (.getResource pool client-timeout)]
+    (let [res (-->> [c] f
+		    (with-retries retry-count)
+		    with-log)]      
+      (.returnResource pool c)
+      res)))
 
 (defn redis-bucket
   "returns callback fn for a Redis backed bucketbucket"
@@ -47,51 +46,57 @@
        (reify IBucket
 	      (bucket-get [this k]
 		  (ensure-jedis-pool jedis-pool host port timeout num-clients)	  
-		  (with-jedis-client @jedis-pool c pool-timeout retry-count
-		    (when-let [v (.get c (mk-key bucket k))]
-		      (read-string v))))
+		  (with-jedis-client @jedis-pool  pool-timeout retry-count
+		    (fn [^Jedis c]
+		      (when-let [v (.get c (mk-key bucket k))]
+		       (read-string v)))))
+
 	      (bucket-put [this k v]
 		  (ensure-jedis-pool jedis-pool host port timeout num-clients)	  
-		  (with-jedis-client @jedis-pool c pool-timeout retry-count
-		    (.set c (mk-key bucket k) (pr-str v))))
+		  (with-jedis-client @jedis-pool  pool-timeout retry-count
+		    (fn [^Jedis c] (.set c (mk-key bucket k) (pr-str v)))))
+	      
 	      (bucket-keys [this]
 		  (ensure-jedis-pool jedis-pool host port timeout num-clients)	  
-		   (with-jedis-client @jedis-pool c pool-timeout retry-count
-		     (let [prefix-ln (inc (.length bucket))]
-		       (doall (map #(.substring % prefix-ln)
-				   (.keys c (format "%s:*" bucket)))))))
+		  (with-jedis-client @jedis-pool pool-timeout retry-count
+		    (fn [^Jedis c]
+		      (let [prefix-ln (inc (.length bucket))]
+			(doall (map #(.substring ^String % prefix-ln)
+				    (.keys c (format "%s:*" bucket))))))))
+	      
 	      (bucket-delete [this k]
 		  (ensure-jedis-pool jedis-pool host port timeout num-clients)	  
-		  (with-jedis-client @jedis-pool c pool-timeout retry-count
-		    (.del c (into-array [(mk-key bucket k)]))))
+		  (with-jedis-client @jedis-pool pool-timeout retry-count
+		    (fn [^Jedis c] (.del c (into-array [(mk-key bucket k)])))))
+	      
 	      (bucket-exists? [this k]
-		  (ensure-jedis-pool jedis-pool host port timeout num-clients)	  
+		  (ensure-jedis-pool jedis-pool host port timeout num-clients)
 		  (default-bucket-exists? this k)
-			      #_(with-jedis-client @jedis-pool c pool-timeout retry-count
-				  (.exists c (mk-key bucket k))))))))
+		  #_(with-jedis-client @jedis-pool pool-timeout retry-count
+		    (fn [^Jedis c] (.exists c (mk-key bucket k)))))))))
 
 ;; File System
 
 
-(defn fs-bucket [dir-path]
+(defn fs-bucket [^String dir-path]
   ; ensure directory exists
   (let [f (java.io.File. dir-path)]
     (.mkdirs f))
   (reify IBucket
          (bucket-get [this k]
-                     (let [f (java.io.File. dir-path (ring/url-encode k))]
+                     (let [f (java.io.File. dir-path ^String (ring/url-encode k))]
                        (when (.exists f) (-> f slurp read-string))))
          (bucket-put [this k v]
-                     (let [f (java.io.File. dir-path (ring/url-encode k))]
+                     (let [f (java.io.File. dir-path ^String(ring/url-encode k))]
                        (spit f (pr-str v))))
          (bucket-exists? [this k]		
-                         (let [f (java.io.File. dir-path (ring/url-encode k))]
+                         (let [f (java.io.File. dir-path ^String (ring/url-encode k))]
                            (.exists f)))
          (bucket-delete [this k]
-                        (let [f (java.io.File. dir-path (ring/url-encode  k))]
+                        (let [f (java.io.File. dir-path ^String (ring/url-encode  k))]
                           (.delete f)))
          (bucket-keys [this]
-                      (for [f (.listFiles (java.io.File. dir-path))]
+                      (for [^java.io.File f (.listFiles (java.io.File. dir-path))]
                         (ring/url-decode (.getName f))))))
 
 ;; ConcurrentHashMap
@@ -127,6 +132,7 @@
          (bucket-exists? [this k]
                          (some #(= k (.getKey %))
                                (-?> s3 (objects bucket-name (str k)) seq)))))
+
 
 ;; Generic Buckets
 

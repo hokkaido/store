@@ -1,21 +1,20 @@
 (ns 
-#^{:doc 
-"
-a lib for interacting with s3.
-"}
+#^{:doc "a lib for interacting with s3."}
 store.s3
-  (:use store.core)
-  (:use clj-serializer.core)
-  (:import (clj_serializer Serializer)
-           (java.io DataOutputStream ByteArrayOutputStream ObjectOutputStream
-                    DataInputStream ByteArrayInputStream ObjectInputStream))
+  (:use 
+        clj-serializer.core
+	[plumbing.core :only [with-silent]])
   (:require [clojure.contrib.duck-streams :as ds])
-  (:import java.io.File)
-  (:import org.jets3t.service.S3Service)
-  (:import org.jets3t.service.impl.rest.httpclient.RestS3Service)
-  (:import org.jets3t.service.model.S3Object)
-  (:import org.jets3t.service.security.AWSCredentials)
-  (:import org.jets3t.service.utils.ServiceUtils))
+  (:import
+       java.io.File
+       clj_serializer.Serializer
+       [java.io DataOutputStream ByteArrayOutputStream ObjectOutputStream
+	        DataInputStream ByteArrayInputStream ObjectInputStream]
+       org.jets3t.service.S3Service
+       org.jets3t.service.impl.rest.httpclient.RestS3Service
+       org.jets3t.service.model.S3Object
+       org.jets3t.service.security.AWSCredentials
+       org.jets3t.service.utils.ServiceUtils))
 
 (defn s3-connection 
   ([{access-key :key secret-key :secretkey}] 
@@ -138,15 +137,15 @@ store.s3
 ;;write out append to 3rd location.
 ;;move append to primary location
 ;;delete individual appends.
-(defn append-str [s3 bucket-name key data]
-  (let [old (try-default nil
-                         get-str s3 bucket-name key)]
-    (put-str s3 bucket-name key (append [old data]))))
+;; (defn append-str [s3 bucket-name key data]
+;;   (let [old ((with-silent get-str)
+;; 	       s3 bucket-name key)]
+;;     (put-str s3 bucket-name key (append [old data]))))
 
-(defn append-clj [s3 bucket-name key data]
-  (let [old (try-default nil
-                         get-clj s3 bucket-name key)]
-    (put-clj s3 bucket-name key (append [old data]))))
+;; (defn append-clj [s3 bucket-name key data]
+;;   (let [old ((with-silent get-clj)  s3 bucket-name key)]
+                         
+;;     (put-clj s3 bucket-name key (append [old data]))))
 
 (defn files [dir]
   (for [file (file-seq (File. dir))
