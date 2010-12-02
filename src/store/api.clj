@@ -102,17 +102,19 @@
 ;; ConcurrentHashMap
 
 (defn hashmap-bucket
-  []
-  (let [h (ConcurrentHashMap.)]
-    (reify IBucket
-           (bucket-put [this k v]
-                       (.put h k (pr-str v)))
-           (bucket-keys [this] (enumeration-seq (.keys h)))
-           (bucket-get [this k] (read-string (.get h k)))
-           (bucket-delete [this k]
-                          (.remove h k))
-           (bucket-exists? [this k]
-                           (.containsKey h k)))))
+  ([]
+     (let [h (ConcurrentHashMap.)]
+       (hashmap-bucket h)))
+  ([h]
+     (reify IBucket
+            (bucket-put [this k v]
+                        (.put h k (pr-str v)))
+            (bucket-keys [this] (enumeration-seq (.keys h)))
+            (bucket-get [this k] (read-string (.get h k)))
+            (bucket-delete [this k]
+                           (.remove h k))
+            (bucket-exists? [this k]
+                            (.containsKey h k)))))
 
 ;; S3
 
