@@ -13,7 +13,8 @@
     (bucket-put b "k2" {:a 1})
     (is (= 1 (-> b (bucket-get "k2") :a)))
     (bucket-put b "k2" 2)
-    (is (= 2 (bucket-get b "k2"))))
+    (is (= 2 (bucket-get b "k2")))
+    (is (nil? (bucket-get b "dne"))))
 
 (defn generic-store-test [mk-store]
   (let [s (mk-store ["b1","b2","b3"])

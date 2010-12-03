@@ -105,12 +105,12 @@
   ([]
      (let [h (ConcurrentHashMap.)]
        (hashmap-bucket h)))
-  ([h]
+  ([^java.util.concurrent.ConcurrentHashMap h]
      (reify IBucket
             (bucket-put [this k v]
                         (.put h k (pr-str v)))
             (bucket-keys [this] (enumeration-seq (.keys h)))
-            (bucket-get [this k] (read-string (.get h k)))
+            (bucket-get [this k] (when-let [v (.get h k)] (read-string v)))
             (bucket-delete [this k]
                            (.remove h k))
             (bucket-exists? [this k]
