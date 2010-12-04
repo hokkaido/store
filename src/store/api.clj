@@ -183,21 +183,26 @@
      (s :exists? \"bucket\" \"key\")
      (s :delete \"bucket\" \"key\") delete [k v] in bucket
      (s :keys \"bucket\") returns seq of keys for bucket
+     (s :bucket \"bucket\") returns bucket impl 
 
-  These ops correspond to bucket-{get,seq,get,exists?,delete,keys} respectively"
+  The first 6  ops correspond to bucket-{get,seq,get,exists?,delete,keys} respectively
+  on the specific bucket"    
   [bucket-map]
   (fn [op bucket-name & args]
     (let [bucket (bucket-map bucket-name)
 	  bucket-op (case op
                         :get bucket-get
 			:seq bucket-seq
+			:bucket nil
                         :put bucket-put
                         :keys bucket-keys
                         :exists? bucket-exists?
                         :delete bucket-delete)]
       (when (nil? bucket)
 	(throw (RuntimeException. (format "Bucket doesn't exist: %s" bucket-name))))
-      (apply bucket-op bucket args))))
+      (if (= :bucket op)
+	bucket
+	(apply bucket-op bucket args)))))
 
 ; This is for a single bucket, so only a single client per-bucket
 (def default-redis-config
