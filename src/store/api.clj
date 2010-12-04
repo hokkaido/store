@@ -10,6 +10,7 @@
   (bucket-get [this k] "fetch value for key")
   (bucket-put [this k v] "write value for key")
   (bucket-keys [this] "seq of existing keys")
+  (bucket-seq [this] "seq of [k v] elems")
   (bucket-delete [this k] "remove key-value pair")
   (bucket-exists? [this k] "does key-value pair exists"))
 
@@ -21,6 +22,10 @@
   (find-first
    (partial = k)
    (bucket-keys b)))
+
+(defn- default-bucket-seq [b]
+  (for [k (bucket-keys b)]
+    [k (bucket-get b k)]))
 
 (defn- ensure-jedis-pool [jedis-pool  host  port timeout  num-clients]
   (when (nil? @jedis-pool)
@@ -63,7 +68,9 @@
 		      (let [prefix-ln (inc (.length bucket))]
 			(doall (map #(.substring ^String % prefix-ln)
 				    (.keys c (format "%s:*" bucket))))))))
-	      
+
+	      (bucket-seq [this] (default-bucket-seq this))
+	      	      
 	      (bucket-delete [this k]
 		  (ensure-jedis-pool jedis-pool host port timeout num-clients)	  
 		  (with-jedis-client @jedis-pool pool-timeout retry-count
@@ -81,23 +88,27 @@
 (defn fs-bucket [^String dir-path]
   ; ensure directory exists
   (let [f (java.io.File. dir-path)]
-    (.mkdirs f))
-  (reify IBucket
-         (bucket-get [this k]
-                     (let [f (java.io.File. dir-path ^String (ring/url-encode k))]
-                       (when (.exists f) (-> f slurp read-string))))
-         (bucket-put [this k v]
-                     (let [f (java.io.File. dir-path ^String(ring/url-encode k))]
-                       (spit f (pr-str v))))
-         (bucket-exists? [this k]		
-                         (let [f (java.io.File. dir-path ^String (ring/url-encode k))]
-                           (.exists f)))
-         (bucket-delete [this k]
-                        (let [f (java.io.File. dir-path ^String (ring/url-encode  k))]
-                          (.delete f)))
-         (bucket-keys [this]
-                      (for [^java.io.File f (.listFiles (java.io.File. dir-path))]
-                        (ring/url-decode (.getName f))))))
+    (.mkdirs f)
+    (reify IBucket
+	   (bucket-get [this k]
+		       (let [f (java.io.File. f ^String (ring/url-encode k))]
+			 (when (.exists f) (-> f slurp read-string))))
+	   (bucket-put [this k v]
+		       (let [f (java.io.File. f ^String(ring/url-encode k))]
+			 (spit f (pr-str v))))
+	   (bucket-exists? [this k]		
+			   (let [f (java.io.File. f ^String (ring/url-encode k))]
+			     (.exists f)))
+	   (bucket-delete [this k]
+			  (let [f (java.io.File. f ^String (ring/url-encode  k))]
+			    (.delete f)))
+
+	   (bucket-seq [this] (default-bucket-seq this))
+	 
+	   (bucket-keys [this]
+			(for [^java.io.File c (.listFiles f)
+			      :when (and (.isFile c) (not (.isHidden c)))]
+			  (ring/url-decode (.getName c)))))))
 
 ;; ConcurrentHashMap
 
@@ -111,6 +122,8 @@
                         (.put h k (pr-str v)))
             (bucket-keys [this] (enumeration-seq (.keys h)))
             (bucket-get [this k] (when-let [v (.get h k)] (read-string v)))
+	    (bucket-seq [this] (for [^java.util.Map$Entry e (seq h)]
+				 [(.getKey e) (read-string (.getValue e))]))
             (bucket-delete [this k]
                            (.remove h k))
             (bucket-exists? [this k]
@@ -129,6 +142,7 @@
 		      (get-keys s3 bucket-name))
          (bucket-get [this k]
 		     (get-clj s3 bucket-name (str k)))
+	 (bucket-seq [this] (default-bucket-seq this))	 
          (bucket-delete [this k]
 			(delete-object s3 bucket-name (str k)))	 
          (bucket-exists? [this k]
@@ -145,7 +159,8 @@
          (bucket-get [this k]
                      (bucket-get read-bucket-impl k))
          (bucket-put [this k v]
-                     (bucket-put write-bucket-impl k v))	 
+                     (bucket-put write-bucket-impl k v))
+	 (bucket-seq [this] (bucket-seq read-bucket-impl))
          (bucket-exists? [this k]
                          (bucket-exists? read-bucket-impl k))
          (bucket-delete [this k]
@@ -162,6 +177,7 @@
     (let [bucket (bucket-map bucket-name)
 	  bucket-op (case op
                         :get bucket-get
+			:seq bucket-seq
                         :put bucket-put
                         :keys bucket-keys
                         :exists? bucket-exists?

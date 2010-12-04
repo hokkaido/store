@@ -14,6 +14,7 @@
     (is (= 1 (-> b (bucket-get "k2") :a)))
     (bucket-put b "k2" 2)
     (is (= 2 (bucket-get b "k2")))
+    (is (= [["k2",2]] (bucket-seq b)))
     (is (nil? (bucket-get b "dne"))))
 
 (defn generic-store-test [mk-store]
@@ -25,13 +26,15 @@
     (s :delete "b1" "k")
     (is (empty? (s :keys "b1")))
     (s :put "b2" "k2" {:a 1})
+    (is (= [["k2" {:a 1}]] (s :seq "b2")))
     (is (= 1 (:a (s :get "b2" "k2"))))))
 
 (deftest hashmap-bucket-test
   (generic-bucket-test (hashmap-bucket)))
 
 (deftest fs-bucket-test
-  (generic-bucket-test (fs-bucket (.getAbsolutePath (java.io.File. ".")))))
+  (generic-bucket-test (fs-bucket (.getAbsolutePath (java.io.File. "store-core-test-dir"))))
+  (.deleteOnExit (java.io.File. "store-core-test-dir")))
 
 (deftest redis-bucket-test
   (generic-bucket-test (redis-bucket "b" default-redis-config)))
