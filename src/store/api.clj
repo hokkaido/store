@@ -172,7 +172,20 @@
   (doseq [k (bucket-keys src)]
     (bucket-put dst k (bucket-get src k))))
 
-(defn mk-store [bucket-map]
+(defn mk-store 
+  "Make a store. The store must come with a bucket-map
+   containing string keys to bucket implementation values. You
+   can mix bucket implementations across bucket keys.
+
+   Store supports the following operations
+     (s :get \"bucket\" \"key\") return key in bucket
+     (s :seq \"bucket\") return seq of [key val] elems in store.
+     (s :exists? \"bucket\" \"key\")
+     (s :delete \"bucket\" \"key\") delete [k v] in bucket
+     (s :keys \"bucket\") returns seq of keys for bucket
+
+  These ops correspond to bucket-{get,seq,get,exists?,delete,keys} respectively"
+  [bucket-map]
   (fn [op bucket-name & args]
     (let [bucket (bucket-map bucket-name)
 	  bucket-op (case op
