@@ -10,4 +10,6 @@
                  [clomert "0.2.0"]
                  [clj-serializer "0.1.0"]]
   :dev-dependencies [[swank-clojure "1.3.0-SNAPSHOT"]
-                     [lein-clojars "0.5.0"]])
+                     [lein-clojars "0.5.0"]]
+  :source-path "src/clj"
+  :java-source-path "src/java")
