@@ -8,8 +8,15 @@
                  [clj-sys/plumbing "0.1.3-SNAPSHOT"]
                  [ring/ring-core "0.3.1"]
                  [clomert "0.2.0"]
-                 [clj-serializer "0.1.0"]]
+                 [clj-serializer "0.1.0"]
+                 [clj-riak "0.1.0-SNAPSHOT"]]
   :dev-dependencies [[swank-clojure "1.3.0-SNAPSHOT"]
-                     [lein-clojars "0.5.0"]]
+                     [lein-clojars "0.5.0"]
+                     [robert/hooke "1.1.0"]]
   :source-path "src/clj"
-  :java-source-path "src/java")
+  :java-source-path "src/java"
+  :test-selectors {:default (fn [v] (not (:system v)))
+                   :system :system
+                   :redis :redis
+                   :riak :riak
+                   :all (fn [_] true)})

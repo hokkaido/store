@@ -1,6 +1,7 @@
 (ns store.api
   (:require [clomert :as v]
-            [ring.util.codec :as ring])
+            [ring.util.codec :as ring]
+            [clj-riak.client :as riak])
   (:use store.s3
         [plumbing.core])
   (:import [java.util.concurrent ConcurrentHashMap TimeoutException]
@@ -82,8 +83,36 @@
 		  #_(with-jedis-client @jedis-pool pool-timeout retry-count
 		    (fn [^Jedis c] (.exists c (mk-key bucket k)))))))))
 
-;; File System
+;; Riak
 
+(defn riak-bucket [^String bucket
+                   ^com.trifork.riak.RiakClient rc]
+  (reify IBucket
+         (bucket-get
+          [this k]
+          (-?> (riak/get rc bucket k {:charset "utf8"
+                                      :content-type "text/plain"})
+               :value
+               (String. "UTF8")
+               read-string))
+         (bucket-put
+          [this k v]
+          (riak/put rc bucket k {:value (.getBytes (pr-str v) "UTF8")
+                                 :content-type "text/plain"}))
+         (bucket-keys
+          [this]
+          (riak/list-keys rc bucket))
+         (bucket-seq
+          [this]
+          (default-bucket-seq this))
+         (bucket-delete
+          [this k]
+          (riak/delete rc bucket k))
+         (bucket-exists?
+          [this k]
+          (default-bucket-exists? this k))))
+
+;; File System
 
 (defn fs-bucket [^String dir-path]
   ; ensure directory exists
@@ -228,6 +257,13 @@
   [bucket-names]
   (mk-store (map-from-keys (fn [b] (hashmap-bucket)) bucket-names)))
 
+(defn mk-riak-store
+  "A store where default bucket implementations
+   is Riak with a given Riak connection."
+  ([bucket-names rc]
+     (mk-store (map-from-keys
+		(fn [b] (riak-bucket b rc))
+		bucket-names))))
 
 ;; (defn mk-vstore
 ;;   [stores]
