@@ -76,6 +76,7 @@
     (is (not (bucket-exists? b "k1")))
     (bucket-put b "k2" {:a 1})
     (is (= 1 (-> b (bucket-get "k2") :a)))
+    (Thread/sleep 1000)
     (bucket-put b "k2" 2)
     (is (= 2 (bucket-get b "k2")))
     (is (= [["k2",2]] (bucket-seq b)))
