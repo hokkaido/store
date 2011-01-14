@@ -1,15 +1,18 @@
 (ns store.api
   (:require [clomert :as v]
+	    [clj-http.client :as client]
             [ring.util.codec :as ring]
-            [clj-riak.client :as riak])
+	    [clojure.string :as str])
   (:use store.s3
-        [plumbing.core])
+        [plumbing.core]
+	[clojure.contrib.json :only [read-json json-str]])
   (:import [java.util.concurrent ConcurrentHashMap TimeoutException]
            [redis.clients.jedis JedisPool Jedis]))
 
 (defprotocol IBucket
   (bucket-get [this k] "fetch value for key")
-  (bucket-put [this k v] "write value for key")
+  (bucket-put [this k v]
+    "write value for key. return value can be anything")
   (bucket-keys [this] "seq of existing keys")
   (bucket-seq [this] "seq of [k v] elems")
   (bucket-delete [this k] "remove key-value pair")
@@ -85,32 +88,52 @@
 
 ;; Riak
 
-(defn riak-bucket [^String bucket
-                   ^com.trifork.riak.RiakClient rc]
-  (reify IBucket
-         (bucket-get
-          [this k]
-          (-?> (riak/get rc bucket k {:charset "utf8"
-                                      :content-type "text/plain"})
-               :value
-               (String. "UTF8")
-               read-string))
-         (bucket-put
-          [this k v]
-          (riak/put rc bucket k {:value (.getBytes (pr-str v) "UTF8")
-                                 :content-type "text/plain"}))
-         (bucket-keys
-          [this]
-          (riak/list-keys rc bucket))
-         (bucket-seq
-          [this]
-          (default-bucket-seq this))
-         (bucket-delete
-          [this k]
-          (riak/delete rc bucket k))
-         (bucket-exists?
-          [this k]
-          (default-bucket-exists? this k))))
+(defn riak-bucket [& {:keys [server,name,port,prefix,bucket-config,threads]
+		      :or {server "http://127.0.0.1"
+			   prefix "riak"
+			   threads 20
+			   bucket-config {:props {:n_val 2
+						  :allow_mult true		       
+						  :last_write_wins true}}
+			   port 8098}}]
+  ;; Bucket config
+  (let [req-base [(str server ":" port) prefix (ring/url-encode name)]
+	mk-path #(str/join "/" (concat req-base %&))
+	mk-json (fn [o] {:body (.getBytes (json-str o) "UTF8")
+			 :content-type "application/json" :accepts :json})]
+    ;; IBucket Implementatin
+    (reify IBucket
+	   (bucket-get
+	    [this k]
+	    (-log> k ring/url-encode mk-path client/get :body read-json))
+	   (bucket-put
+	    [this k v]
+	    (-> k ring/url-encode mk-path (client/post (mk-json v))))  
+	   (bucket-delete
+	    [this k]
+	    (-> k ring/url-encode mk-path client/delete))	  
+	   (bucket-seq
+	    [this]
+	    (default-bucket-seq this))
+	   (bucket-keys
+	    [this]
+	    (-> (mk-path)
+		 (client/get {:query-params {"keys" "true"}})			  
+		 :body
+		 ring/url-decode
+		 read-json
+		 :keys))
+	   (bucket-exists?
+	    [this k]
+	    (default-bucket-exists? this k)))))
+
+(comment
+  (def b (riak-bucket :name "b"))
+  (bucket-put b "k" "v4")
+  (bucket-get b "k")
+)
+
+;; Voldemort
 
 ;; File System
 
@@ -260,10 +283,12 @@
 (defn mk-riak-store
   "A store where default bucket implementations
    is Riak with a given Riak connection."
-  ([bucket-names rc]
+  ([bucket-names riak-config]
      (mk-store (map-from-keys
-		(fn [b] (riak-bucket b rc))
-		bucket-names))))
+		(fn [k] (apply riak-bucket
+			       (apply concat (assoc riak-config :name k))))
+		bucket-names)))
+  ([bucket-names] (mk-riak-store bucket-names nil)))
 
 ;; (defn mk-vstore
 ;;   [stores]

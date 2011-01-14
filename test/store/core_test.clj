@@ -1,5 +1,4 @@
 (ns store.core-test
-  (:require [clj-riak.client :as riak])
   (:use clojure.test
         store.api
         [plumbing.core :only [find-first]]))
@@ -67,7 +66,7 @@
 
 (deftest ^{:system true :riak true}
   riak-bucket-test
-  (let [b (riak-bucket "b" (riak/init {:host "127.0.0.1" :port 8087}))]
+  (let [b (riak-bucket :name "b")]
     (bucket-put b "k1" "v1")
     (is (= (bucket-get b "k1") "v1"))
     (is (find-first (partial = "k1") (bucket-keys b)))
@@ -84,7 +83,7 @@
 
 (deftest ^{:system true :riak true}
   riak-store-test
-  (let [s (mk-riak-store ["b1","b2","b3"] (riak/init {:host "127.0.0.1" :port 8087}))
+  (let [s (mk-riak-store ["b1","b2","b3"])
 	f (partial s :get)]
     (s :put "b1" "k" "v")
     (is (= (f "b1" "k") "v"))
