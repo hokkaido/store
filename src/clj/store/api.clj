@@ -88,10 +88,9 @@
 
 ;; Riak
 
-(defn riak-bucket [& {:keys [server,name,port,prefix,bucket-config,threads]
+(defn riak-bucket [& {:keys [server,name,port,prefix,bucket-config]
 		      :or {server "http://127.0.0.1"
 			   prefix "riak"
-			   threads 20
 			   bucket-config {:props {:n_val 2
 						  :allow_mult true		       
 						  :last_write_wins true}}
@@ -117,20 +116,25 @@
 	    (default-bucket-seq this))
 	   (bucket-keys
 	    [this]
-	    (-> (mk-path)
-		 (client/get {:query-params {"keys" "true"}})			  
-		 :body
-		 ring/url-decode
-		 read-json
-		 :keys))
+	    (let [data (-> (mk-path)
+			   (client/get {:query-params {"keys" "stream"}})						   :body
+			   java.io.StringReader.
+			   java.io.PushbackReader.)]
+	      (loop [ks nil]
+		(let [x (silent read-json data)]
+		  (if (nil? x)
+		      ks
+		      (recur (concat ks (:keys x))))))))
 	   (bucket-exists?
 	    [this k]
 	    (default-bucket-exists? this k)))))
 
 (comment
   (def b (riak-bucket :name "b"))
-  (bucket-put b "k" "v4")
-  (bucket-get b "k")
+  (doseq [k (bucket-keys b)]
+    (bucket-delete b k))
+  (bucket-put b "k" "v")
+  (bucket-keys b)
 )
 
 ;; Voldemort
