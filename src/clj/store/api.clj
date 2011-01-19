@@ -107,7 +107,7 @@
 	    (-log> k ring/url-encode mk-path client/get :body read-json))
 	   (bucket-put
 	    [this k v]
-	    (-> k ring/url-encode mk-path (client/post (mk-json v))))  
+	    (-> k str ring/url-encode mk-path (client/post (mk-json v))))  
 	   (bucket-delete
 	    [this k]
 	    (-> k ring/url-encode mk-path client/delete))	  
@@ -121,10 +121,14 @@
 			   java.io.StringReader.
 			   java.io.PushbackReader.)]
 	      (loop [ks nil]
-		(let [x (silent read-json data)]
-		  (if (nil? x)
-		      ks
-		      (recur (concat ks (:keys x))))))))
+		(let [ch (.read data)]
+		  (if (= ch -1)
+		    ks
+		    (do
+		      (.unread data ch)
+		      (recur (concat ks
+				     (map ring/url-decode
+					  (:keys (silent read-json data)))))))))))
 	   (bucket-exists?
 	    [this k]
 	    (default-bucket-exists? this k)))))
