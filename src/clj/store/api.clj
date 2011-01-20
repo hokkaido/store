@@ -104,7 +104,7 @@
     (reify IBucket
 	   (bucket-get
 	    [this k]
-	    (-log> k ring/url-encode mk-path client/get :body read-json))
+	    (-log> k str ring/url-encode mk-path client/get :body read-json))
 	   (bucket-put
 	    [this k v]
 	    (-> k str ring/url-encode mk-path (client/post (mk-json v))))  
