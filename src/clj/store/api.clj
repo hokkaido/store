@@ -244,7 +244,6 @@
      (s :delete \"bucket\" \"key\") delete [k v] in bucket
      (s :keys \"bucket\") returns seq of keys for bucket
      (s :bucket \"bucket\") returns bucket impl 
-
   The first 6  ops correspond to bucket-{get,seq,get,exists?,delete,keys} respectively
   on the specific bucket"    
   [bucket-map]
