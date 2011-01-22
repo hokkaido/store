@@ -22,14 +22,18 @@
 
 (defn- mk-key [bucket key] (format "%s:%s" bucket key))
 
-(defn- default-bucket-exists? [b k]
+;;TODO better defaulting.
+(defn default-bucket-exists? [b k]
   (find-first
    (partial = k)
    (bucket-keys b)))
 
-(defn- default-bucket-seq [b]
+(defn default-bucket-seq [b]
   (for [k (bucket-keys b)]
     [k (bucket-get b k)]))
+
+(defn default-bucket-keys [b]
+  (map first (bucket-seq b)))
 
 (defn- ensure-jedis-pool [jedis-pool  host  port timeout  num-clients]
   (when (nil? @jedis-pool)
