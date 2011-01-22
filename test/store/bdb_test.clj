@@ -2,10 +2,17 @@
   (:use clojure.test
 	store.api
 	store.bdb
+	[clojure.contrib.io :only [delete-file make-parents delete-file-recursively]]
 	[plumbing.core :only [find-first]]))
 
+(defn- ensure-test-directory []
+  (delete-file-recursively (java.io.File. "/tmp/bdbtest") true)
+  (make-parents (java.io.File. "/tmp/bdbtest/ping"))
+  (delete-file (java.io.File.  "/tmp/bdbtest/ping") true))
+
 (deftest bdb-basics
-  (let [db (bdb-open "/home/bradford/bdbtest/" "bdb_test")
+  (ensure-test-directory)
+  (let [db (bdb-open "/tmp/bdbtest/" "bdb_test")
 	_ (bdb-put db :foo [1 2 3])]
     (is (= [1 2 3] (bdb-get db :foo)))
     (is (= [:foo [1 2 3]] (first (entries-seq db))))
@@ -13,9 +20,9 @@
     (is (empty? (entries-seq db)))))
 
 (deftest;; ^{:system true :bdb true}
-  bdb-bucket-test
-  (let [b (bdb-bucket "bdb_test"
-		      {:env-path "/home/bradford/bdbtest/"})]
+    bdb-bucket-test
+  (ensure-test-directory)
+  (let [b (bdb-bucket "bdb_test" :env-path "/tmp/bdbtest")]
     (bucket-put b "k1" "v1")
     (is (= (bucket-get b "k1") "v1"))
     (is (find-first (partial = "k1") (bucket-keys b)))

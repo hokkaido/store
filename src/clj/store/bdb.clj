@@ -47,19 +47,18 @@
     (.delete db nil entry-key)))
 
 (defn bdb-open [env-path db-name]
-  (let [env-config (EnvironmentConfig.)
-	_ (.setAllowCreate env-config true)
-	db-env (Environment. (java.io.File. env-path) env-config)
-	db-config (DatabaseConfig.)
-	_ (.setAllowCreate db-config true)
-	db (.openDatabase db-env nil db-name db-config)]
-    db))
+  (let [env-config (doto (EnvironmentConfig.)
+		     (.setAllowCreate true))
+	db-env (-> env-path java.io.File. (Environment. env-config))
+	db-config (doto (DatabaseConfig.)
+		    (.setAllowCreate true))]
+    (.openDatabase db-env nil db-name db-config)))
 
 (defn bdb-bucket
   "returns callback fn for a Berkeley DB backed bucket."
-  ([^String bucket 
+  ([^String bucket  &
     {:keys [env-path]
-     :as spec}]
+     :or {env-path "/var/bdb/"}}]
      (let [db (bdb-open env-path bucket)]
        (reify IBucket
 	      (bucket-get [this k]
