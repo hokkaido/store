@@ -70,4 +70,6 @@
 			  (entries-seq db))
 	      (bucket-delete [this k]
 			     (bdb-delete db k))
+	      (bucket-update [this k f]
+			     (default-bucket-update this k f))
 	      (bucket-exists? [this k] (default-bucket-exists? this k))))))

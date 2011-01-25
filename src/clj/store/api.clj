@@ -16,7 +16,8 @@
   (bucket-keys [this] "seq of existing keys")
   (bucket-seq [this] "seq of [k v] elems")
   (bucket-delete [this k] "remove key-value pair")
-  (bucket-exists? [this k] "does key-value pair exists"))
+  (bucket-exists? [this k] "does key-value pair exists")
+  (bucket-update [this k f]))
 
 ;; Redis
 
@@ -27,6 +28,12 @@
   (find-first
    (partial = k)
    (bucket-keys b)))
+
+(defn default-bucket-update [b k f]
+  (->>  k
+	(bucket-get b)
+	f
+	(bucket-put b k)))
 
 (defn default-bucket-seq [b]
   (for [k (bucket-keys b)]
@@ -76,6 +83,9 @@
 		      (let [prefix-ln (inc (.length bucket))]
 			(doall (map #(.substring ^String % prefix-ln)
 				    (.keys c (format "%s:*" bucket))))))))
+
+	      (bucket-update [this k f]
+		   (default-bucket-update this k f))
 
 	      (bucket-seq [this] (default-bucket-seq this))
 	      	      
@@ -135,7 +145,10 @@
 					  (:keys (silent read-json data)))))))))))
 	   (bucket-exists?
 	    [this k]
-	    (default-bucket-exists? this k)))))
+	    (default-bucket-exists? this k))
+	   (bucket-update
+	    [this k f]
+	    (default-bucket-update this k f)))))
 
 (comment
   (def b (riak-bucket :name "b"))
@@ -172,7 +185,9 @@
 	   (bucket-keys [this]
 			(for [^java.io.File c (.listFiles f)
 			      :when (and (.isFile c) (not (.isHidden c)))]
-			  (ring/url-decode (.getName c)))))))
+			  (ring/url-decode (.getName c))))
+	   (bucket-update [this k f]
+			  (default-bucket-update this k f)))))
 
 ;; ConcurrentHashMap
 
@@ -191,7 +206,9 @@
             (bucket-delete [this k]
                            (.remove h k))
             (bucket-exists? [this k]
-                            (.containsKey h k)))))
+                            (.containsKey h k))
+	    (bucket-update [this k f]
+			   (default-bucket-update this k f)))))
 
 ;; S3
 
@@ -211,7 +228,9 @@
 			(delete-object s3 bucket-name (str k)))	 
          (bucket-exists? [this k]
                          (some #(= k (.getKey %))
-                               (-?> s3 (objects bucket-name (str k)) seq)))))
+                               (-?> s3 (objects bucket-name (str k)) seq)))
+	 (bucket-update [this k f]
+			(default-bucket-update this k f))))
 
 
 ;; Generic Buckets
@@ -258,6 +277,7 @@
 			:seq bucket-seq
 			:bucket nil
                         :put bucket-put
+			:update bucket-update
                         :keys bucket-keys
                         :exists? bucket-exists?
                         :delete bucket-delete)]
