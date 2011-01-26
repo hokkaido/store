@@ -108,7 +108,8 @@
     (reify IBucket
 	   (bucket-get
 	    [this k]
-	    (-log> k str ring/url-encode mk-path client/get :body read-json))
+	    (-log> k str ring/url-encode mk-path client/get
+		   :body #(read-json % false))
 	   (bucket-put
 	    [this k v]
 	    (-> k str ring/url-encode mk-path (client/post (mk-json v))))  
@@ -132,7 +133,9 @@
 		      (.unread data ch)
 		      (recur (concat ks
 				     (map ring/url-decode
-					  (:keys (silent read-json data)))))))))))
+					  (:keys (silent
+						  read-json
+						  data false)))))))))))
 	   (bucket-exists?
 	    [this k]
 	    (default-bucket-exists? this k)))))

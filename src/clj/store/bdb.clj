@@ -27,28 +27,32 @@
 	   OperationStatus/SUCCESS)
       (from-entry entry-val))))
 
-(defn entries-seq [db]
-  (let [cursor (.openCursor db nil nil)]
-    (lazy-seq ((fn [acc]
-		 (let [k (DatabaseEntry.)
-		       v (DatabaseEntry.)]
-		   (if (not (= (.getNext cursor k v LockMode/DEFAULT)
-			       OperationStatus/SUCCESS))
-		     (do (.close cursor)
-			 acc)
-		     (recur
-		      (cons [(from-entry k)
-			     (from-entry v)]
-			    acc)))))
-		 []))))
+(defn entries-seq
+ [db]
+ (let [cursor (.openCursor db nil nil)]
+   (take-while identity
+               (repeatedly
+                #(let [k (DatabaseEntry.)
+                       v (DatabaseEntry.)]
+                   (if (not (= (.getNext cursor k v LockMode/DEFAULT)
+                               OperationStatus/SUCCESS))
+                     ;; return nil
+                     (do (.close cursor)
+                         nil)
+                     [(from-entry k)
+                      (from-entry v)]))))))
 
 (defn bdb-delete [db k]
   (let [entry-key (to-entry k)]
     (.delete db nil entry-key)))
 
+;;http://download.oracle.com/docs/cd/E17076_02/html/java/com/sleepycat/db/EnvironmentConfig.html
+;;http://doc.sumy.ua/db/db/ref/cam/intro.html
+
 (defn bdb-open [env-path db-name]
   (let [env-config (EnvironmentConfig.)
 	_ (.setAllowCreate env-config true)
+	_ (.setReadOnly env-config true)
 	db-env (Environment. (java.io.File. env-path) env-config)
 	db-config (DatabaseConfig.)
 	_ (.setAllowCreate db-config true)
