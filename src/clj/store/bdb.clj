@@ -1,5 +1,6 @@
 (ns store.bdb
-  (:import com.sleepycat.je.DatabaseEntry
+  (:import com.sleepycat.je.Database 
+	   com.sleepycat.je.DatabaseEntry
 	   com.sleepycat.je.LockMode
 	   com.sleepycat.je.Environment
 	   com.sleepycat.je.EnvironmentConfig
@@ -9,18 +10,18 @@
 
 ;;http://download.oracle.com/docs/cd/E17277_02/html/GettingStartedGuide
 
-(defn from-entry [e]
+(defn from-entry [#^DatabaseEntry e]
   (read-string (String. (.getData e) "UTF-8")))
 
 (defn to-entry [clj]
   (DatabaseEntry. (.getBytes (pr-str clj) "UTF-8")))
 
-(defn bdb-put [db k v]
+(defn bdb-put [#^Database db k v]
   (let [entry-key (to-entry k)
 	entry-val (to-entry v)]
     (.put db nil entry-key entry-val)))
 
-(defn bdb-get [db k]
+(defn bdb-get [#^Database db k]
   (let [entry-key (to-entry k)
 	entry-val (DatabaseEntry.)]
     (if (= (.get db nil entry-key entry-val LockMode/DEFAULT)
@@ -28,7 +29,7 @@
       (from-entry entry-val))))
 
 (defn entries-seq
- [db]
+ [#^Database db]
  (let [cursor (.openCursor db nil nil)]
    (take-while identity
                (repeatedly
@@ -42,37 +43,38 @@
                      [(from-entry k)
                       (from-entry v)]))))))
 
-(defn bdb-delete [db k]
+(defn bdb-delete [#^Database db k]
   (let [entry-key (to-entry k)]
     (.delete db nil entry-key)))
 
 ;;http://download.oracle.com/docs/cd/E17076_02/html/java/com/sleepycat/db/EnvironmentConfig.html
 ;;http://doc.sumy.ua/db/db/ref/cam/intro.html
 
-(defn bdb-open [env-path db-name]
-  (let [env-config (EnvironmentConfig.)
-	_ (.setAllowCreate env-config true)
-	_ (.setReadOnly env-config true)
-	db-env (Environment. (java.io.File. env-path) env-config)
-	db-config (DatabaseConfig.)
-	_ (.setAllowCreate db-config true)
-	db (.openDatabase db-env nil db-name db-config)]
-    db))
+(defn bdb-open [& {:keys [env-path bucket read-only]
+		   :or {read-only false
+			env-path "/var/bdb/"}}]
+  (let [env-config (doto (EnvironmentConfig.)
+		     (.setAllowCreate true)
+		     (.setReadOnly read-only))
+	db-env (-> env-path java.io.File. (Environment. env-config))
+	db-config (doto (DatabaseConfig.)
+		    (.setAllowCreate true))]
+    (.openDatabase db-env nil bucket db-config)))
 
 (defn bdb-bucket
   "returns callback fn for a Berkeley DB backed bucket."
-  ([^String bucket 
-    {:keys [env-path]
-     :as spec}]
-     (let [db (bdb-open env-path bucket)]
-       (reify IBucket
-	      (bucket-get [this k]
-			  (bdb-get db k))
-	      (bucket-put [this k v]
-			  (bdb-put db k v))
-	      (bucket-keys [this] (default-bucket-keys this))
-	      (bucket-seq [this]
-			  (entries-seq db))
-	      (bucket-delete [this k]
-			     (bdb-delete db k))
-	      (bucket-exists? [this k] (default-bucket-exists? this k))))))
+  [& env]
+  (let [db (apply bdb-open env)]
+    (reify IBucket
+	   (bucket-get [this k]
+		       (bdb-get db k))
+	   (bucket-put [this k v]
+		       (bdb-put db k v))
+	   (bucket-keys [this] (default-bucket-keys this))
+	   (bucket-seq [this]
+		       (entries-seq db))
+	   (bucket-delete [this k]
+			  (bdb-delete db k))
+	   (bucket-update [this k f]
+			  (default-bucket-update this k f))
+	   (bucket-exists? [this k] (default-bucket-exists? this k)))))
