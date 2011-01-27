@@ -7,6 +7,7 @@
                  [clj-serializer  "0.1.1"]
                  [clj-sys/plumbing "0.1.3-SNAPSHOT"]
 		 [clj-http "0.1.2"]
+		 [work "0.2.3-SNAPSHOT"]
                  [ring/ring-core "0.3.1"]
                  [clomert "0.2.0"]
 		 [berkeleydb/je "3.2.76"]

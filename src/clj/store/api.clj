@@ -2,7 +2,8 @@
   (:require [clomert :as v]
 	    [clj-http.client :as client]
             [ring.util.codec :as ring]
-	    [clojure.string :as str])
+	    [clojure.string :as str]
+	    [work.core :as work])
   (:use store.s3
         [plumbing.core]
 	[clojure.contrib.json :only [read-json json-str]])
@@ -253,6 +254,14 @@
                         (bucket-delete write-bucket-impl k))
          (bucket-keys [this]
                       (bucket-keys read-bucket-impl))))
+
+(defn- clear-bucket!
+  [store bucket-name & {:keys [threads] :or {threads 20}}]
+  (let [b (store :bucket bucket-name)]
+    (work/map-work
+     (partial bucket-delete b)
+     threads
+     (bucket-keys b))))
 
 (defn copy-bucket [src dst]
   (doseq [k (bucket-keys src)]
