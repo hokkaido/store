@@ -8,6 +8,7 @@
         [plumbing.core]
 	[clojure.contrib.json :only [read-json json-str]])
   (:import [java.util.concurrent ConcurrentHashMap TimeoutException]
+	   
            [redis.clients.jedis JedisPool Jedis]))
 
 (defprotocol IBucket
@@ -106,9 +107,6 @@
 (defn riak-bucket [& {:keys [server,name,port,prefix,bucket-config]
 		      :or {server "http://127.0.0.1"
 			   prefix "riak"
-			   bucket-config {:props {:n_val 2
-						  :allow_mult true		       
-						  :last_write_wins true}}
 			   port 8098}}]
   ;; Bucket config
   (let [req-base [(str server ":" port) prefix (ring/url-encode name)]
@@ -133,7 +131,8 @@
 	   (bucket-keys
 	    [this]
 	    (let [data (-> (mk-path)
-			   (client/get {:query-params {"keys" "stream"}})						   :body
+			   (client/get {:query-params {"keys" "stream"}})
+			   :body
 			   java.io.StringReader.
 			   java.io.PushbackReader.)]
 	      (loop [ks nil]
@@ -146,7 +145,7 @@
 				     (map ring/url-decode
 					  (:keys (silent
 						  read-json
-						  data false)))))))))))
+						  data)))))))))))
 	   (bucket-exists?
 	    [this k]
 	    (default-bucket-exists? this k))
@@ -359,3 +358,24 @@
 ;; 		   (stores (str bucket))
 ;; 		   (:delete k)))}))
 ;;TODO: :exists? :keys
+
+(comment
+  org.apache.http.entity.mime.MultipartEntity
+  (def b (riak-bucket :server
+		      "http://my-load-balancer-2107222498.us-east-1.elb.amazonaws.com"
+		      :port 80
+		      :name "twitter-access-token"))
+  (bucket-keys b)
+
+  (def data (-> "http://ec2-50-16-129-61.compute-1.amazonaws.com:8097/riak/entries"
+		(client/get {:query-params {"keys" "stream"}})))
+  (seq (.getElements (.getContentType )))
+  (.getContentType (.getEntity ))
+  (seq (.getAllHeaders (:resp data)))
+  (.getContentType (.getEntity (:resp data)))
+  
+  (def r (java.io.StringReader. data))
+  (-> data read-json :keys)
+  (identity nil)
+  
+)
