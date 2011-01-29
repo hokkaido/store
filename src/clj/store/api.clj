@@ -1,14 +1,14 @@
 (ns store.api
   (:require [clomert :as v]
-	    [clj-http.client :as client]
+            [clj-http.client :as client]
             [ring.util.codec :as ring]
-	    [clojure.string :as str]
-	    [work.core :as work])
+            [clojure.string :as str]
+            [work.core :as work]
+            [clj-json.core :as json])
   (:use store.s3
         [plumbing.core]
-	[clojure.contrib.json :only [read-json json-str]])
+        [clojure.contrib.json :only [read-json json-str]])
   (:import [java.util.concurrent ConcurrentHashMap TimeoutException]
-	   
            [redis.clients.jedis JedisPool Jedis]))
 
 (defprotocol IBucket
@@ -110,15 +110,15 @@
 			   port 8098}}]
   ;; Bucket config
   (let [req-base [(str server ":" port) prefix (ring/url-encode name)]
-	mk-path #(str/join "/" (concat req-base %&))
-	mk-json (fn [o] {:body (.getBytes (json-str o) "UTF8")
-			 :content-type "application/json" :accepts :json})]
+        mk-path #(str/join "/" (concat req-base %&))
+        mk-json (fn [o] {:body (.getBytes (json/generate-string o) "UTF8")
+                         :content-type "application/json" :accepts :json})]
     ;; IBucket Implementatin
     (reify IBucket
 	   (bucket-get
 	    [this k]
 	    (-log> k str ring/url-encode mk-path client/get
-		   :body (read-json false)))
+             :body (json/parse-string)))
 	   (bucket-put
 	    [this k v]
 	    (-> k str ring/url-encode mk-path (client/post (mk-json v))))  
@@ -130,22 +130,16 @@
 	    (default-bucket-seq this))
 	   (bucket-keys
 	    [this]
-	    (let [data (-> (mk-path)
-			   (client/get {:query-params {"keys" "stream"}})
-			   :body
-			   java.io.StringReader.
-			   java.io.PushbackReader.)]
-	      (loop [ks nil]
-		(let [ch (.read data)]
-		  (if (= ch -1)
-		    ks
-		    (do
-		      (.unread data ch)
-		      (recur (concat ks
-				     (map ring/url-decode
-					  (:keys (silent
-						  read-json
-						  data)))))))))))
+      (-> (mk-path)
+          (client/get {:query-params {"keys" "stream"}
+                       :chunked? true})
+          :body
+          clojure.string/join
+          java.io.StringReader.
+          java.io.BufferedReader.
+          json/parsed-seq
+          ((partial apply merge-with concat))
+          (get "keys")))
 	   (bucket-exists?
 	    [this k]
 	    (default-bucket-exists? this k))
