@@ -248,7 +248,7 @@
          (bucket-keys [this]
                       (bucket-keys read-bucket-impl))))
 
-(defn- clear-bucket!
+(defn clear-bucket!
   [store bucket-name & {:keys [threads] :or {threads 20}}]
   (let [b (store :bucket bucket-name)]
     (work/map-work
