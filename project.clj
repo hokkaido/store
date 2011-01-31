@@ -24,4 +24,6 @@
                    :riak :riak
 		   :in-memory :in-memory
 		   :performance :performance
-                   :all (fn [x] (not= x :performance))})
+                   :all (fn [x] (not= x :performance))}
+  :repositories {"snapshots" "http://mvn.getwoven.com/repos/woven-public-snapshots"
+                 "releases" "http://mvn.getwoven.com/repos/woven-public-releases"})
