@@ -24,7 +24,8 @@
   (ensure-test-directory)
   (let [db (bdb-open :env-path "/tmp/bdbtest/" :bucket "bdb_test")]
     (bdb-put db "k" "v"))
-  (let [db-read (bdb-open :env-path "/tmp/bdbtest" :bucket "bdb_test" :read-only true)]
+  (let [db-read (bdb-open :env-path "/tmp/bdbtest" :bucket "bdb_test"
+			  :read-only-db true)]
     (is (= "v" (bdb-get db-read "k")))))
 
 (deftest;; ^{:system true :bdb true}

@@ -48,18 +48,26 @@
     (.delete db nil entry-key)))
 
 ;;http://download.oracle.com/docs/cd/E17076_02/html/java/com/sleepycat/db/EnvironmentConfig.html
-;;http://doc.sumy.ua/db/db/ref/cam/intro.html
+;;http://download.oracle.com/docs/cd/E17076_02/html/java/com/sleepycat/db/EnvironmentConfig.html
 
-(defn bdb-open [& {:keys [env-path bucket read-only]
-		   :or {read-only false
-			env-path "/var/bdb/"}}]
+(defn bdb-env [env-path read-only]
   (let [env-config (doto (EnvironmentConfig.)
-		     (.setAllowCreate true)
-		     (.setReadOnly read-only))
-	db-env (-> env-path java.io.File. (Environment. env-config))
-	db-config (doto (DatabaseConfig.)
-		    (.setAllowCreate true))]
+		     (.setReadOnly read-only)
+		     (.setAllowCreate (not read-only)))]
+	(-> env-path java.io.File. (Environment. env-config))))
+
+(defn open-db [db-env bucket read-only]
+  (let [db-config (doto (DatabaseConfig.)
+		    (.setReadOnly read-only)
+		    (.setAllowCreate (not read-only)))]
     (.openDatabase db-env nil bucket db-config)))
+
+(defn bdb-open [& {:keys [env-path bucket read-only-env read-only-db]
+		   :or {read-only-env false
+			read-only-db false
+			env-path "/var/bdb/"}}]
+  (let [db-env (bdb-env env-path read-only-env)]
+	(open-db db-env bucket read-only-db)))
 
 (defn bdb-bucket
   "returns callback fn for a Berkeley DB backed bucket."
