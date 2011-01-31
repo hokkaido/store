@@ -11,7 +11,7 @@
                  [work "0.2.3-SNAPSHOT"]
                  [ring/ring-core "0.3.1"]
                  [clomert "0.2.0"]
-                 [berkeleydb/je "3.2.76"]
+                 [com.sleepycat/je "4.1.7"]
                  [clj-serializer "0.1.0"]]
   :dev-dependencies [[swank-clojure "1.3.0-SNAPSHOT"]
                      [lein-clojars "0.5.0"]
@@ -26,4 +26,5 @@
 		   :performance :performance
                    :all (fn [x] (not= x :performance))}
   :repositories {"snapshots" "http://mvn.getwoven.com/repos/woven-public-snapshots"
-                 "releases" "http://mvn.getwoven.com/repos/woven-public-releases"})
+                 "releases" "http://mvn.getwoven.com/repos/woven-public-releases"
+                 "orcale" "http://download.oracle.com/maven/"})
