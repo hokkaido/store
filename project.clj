@@ -7,7 +7,7 @@
                  [org.clojars.mattrepl/jedis "1.3.2-SNAPSHOT"]
                  [clj-serializer  "0.1.1"]
                  [clj-sys/plumbing "0.1.3-SNAPSHOT"]
-                 [clj-http "0.1.2-SNAPSHOT-CHUNK"]
+                 [woven/clj-http "0.1.2-SNAPSHOT"]
                  [work "0.2.3-SNAPSHOT"]
                  [ring/ring-core "0.3.1"]
                  [clomert "0.2.0"]
