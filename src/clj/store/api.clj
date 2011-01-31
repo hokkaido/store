@@ -139,7 +139,8 @@
           java.io.BufferedReader.
           json/parsed-seq
           ((partial apply merge-with concat))
-          (get "keys")))
+          (get "keys")
+	  ((partial map ring/url-decode))))
 	   (bucket-exists?
 	    [this k]
 	    (default-bucket-exists? this k))
