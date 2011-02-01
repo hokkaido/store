@@ -1,14 +1,23 @@
 (ns store.bdb
-  (:import com.sleepycat.je.Database 
-	   com.sleepycat.je.DatabaseEntry
-	   com.sleepycat.je.LockMode
-	   com.sleepycat.je.Environment
-	   com.sleepycat.je.EnvironmentConfig
-	   com.sleepycat.je.DatabaseConfig
-	   com.sleepycat.je.OperationStatus)
+  (:import (com.sleepycat.je Database 
+                             DatabaseEntry
+                             LockMode
+                             Environment
+                             EnvironmentConfig
+                             DatabaseConfig
+                             OperationStatus
+                             CheckpointConfig
+                             CacheMode))
   (:use store.api))
 
 ;;http://download.oracle.com/docs/cd/E17277_02/html/GettingStartedGuide
+
+(def cache-modes {:default CacheMode/DEFAULT
+                  :evict-bin CacheMode/EVICT_BIN
+                  :evict-ln CacheMode/EVICT_LN
+                  :keep-hot CacheMode/KEEP_HOT
+                  :make-cold CacheMode/MAKE_COLD
+                  :unchanged CacheMode/UNCHANGED})
 
 (defn from-entry [^DatabaseEntry e]
   (read-string (String. (.getData e) "UTF-8")))
@@ -50,31 +59,59 @@
 ;;http://download.oracle.com/docs/cd/E17076_02/html/java/com/sleepycat/db/EnvironmentConfig.html
 ;;http://download.oracle.com/docs/cd/E17076_02/html/java/com/sleepycat/db/EnvironmentConfig.html
 
-(defn bdb-env [env-path read-only checkpoint-off]
+(defn bdb-env [env-path read-only-env
+               checkpoint-kb checkpoint-mins
+               locking cache-percent]
   (let [env-config (doto (EnvironmentConfig.)
-                     (.setReadOnly read-only)
-                     (.setAllowCreate (not read-only)))]
+                     (.setReadOnly read-only-env)
+                     (.setAllowCreate (not read-only-env))
+                     (.setLocking locking)
+                     (.setCachePercent cache-percent))]
+    (doto CheckpointConfig/DEFAULT
+      (.setKBytes checkpoint-kb)
+      (.setMinutes checkpoint-mins))
     (-> env-path java.io.File. (Environment. env-config))))
 
-(defn bdb-conf [read-only deferred-write]
-  (doto (DatabaseConfig.)
-    (.setReadOnly read-only)
-    (.setAllowCreate (not read-only))
-    (.setDeferredWrite deferred-write)))
+(defn bdb-conf [read-only-db deferred-write cache-mode]
+  (let []
+    (doto (DatabaseConfig.)
+      (.setReadOnly read-only-db)
+      (.setAllowCreate (not read-only-db))
+      (.setDeferredWrite deferred-write)
+      (.setCacheMode (cache-modes cache-mode)))))
 
 (defn open-db [db-env db-conf bucket]
   (.openDatabase db-env nil bucket db-conf))
 
-(defn bdb-open [& {:keys [env-path bucket read-only-env
-                          read-only-db deferred-write
-                          checkpoint-off]
-                   :or {read-only-env false
-                        read-only-db false
-                        env-path "/var/bdb/"
-                        deferred-write false
-                        checkpoint-off false}}]
-  (let [db-env (bdb-env env-path read-only-env checkpoint-off)
-        db-conf (bdb-conf read-only-db deferred-write)]
+(defn bdb-open
+  "Parameters:
+   :env-path - bdb environment path
+   :bucket - bucket name
+   :read-only-env - set bdb environment to be read-only
+   :read-only-db - set db to read-only, overrides environment config
+   :deferred-write - toggle deferred writing to filesystem
+   :checkpoint - toggle checkpointing
+   :locking - toggle locking, if turned off then the cleaner is also
+   :evict - toggle leaf node eviction in cache
+   :cache-percent - percent of heap to use for BDB cache
+   :cache-mode - eviction policy for cache"
+  [& {:keys [env-path bucket read-only-env
+             read-only-db deferred-write
+             checkpoint-kb checkpoint-mins
+             locking evict cache-percent cache-mode]
+      :or {read-only-env false
+           read-only-db false
+           env-path "/var/bdb/"
+           deferred-write false
+           checkpoint-kb 0 
+           checkpoint-mins 0
+           locking true
+           cache-percent 60
+           cache-mode :default}
+      :as opts}]
+  (let [db-env (bdb-env env-path read-only-env checkpoint-kb checkpoint-mins
+                        locking cache-percent)
+        db-conf (bdb-conf read-only-db deferred-write cache-mode)]
     (open-db db-env db-conf bucket)))
 
 (defn bdb-bucket
