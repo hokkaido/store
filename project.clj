@@ -27,4 +27,4 @@
                    :all (fn [x] (not= x :performance))}
   :repositories {"snapshots" "http://mvn.getwoven.com/repos/woven-public-snapshots"
                  "releases" "http://mvn.getwoven.com/repos/woven-public-releases"
-                 "orcale" "http://download.oracle.com/maven/"})
+                 "oracle" "http://download.oracle.com/maven/"})

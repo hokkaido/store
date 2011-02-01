@@ -21,7 +21,7 @@
 
 (defn generic-store-test [mk-store]
   (let [s (mk-store ["b1","b2","b3"])
-	f (partial s :get)]
+        f (partial s :get)]
     (s :put "b1" "k" "v")
     (is (= (f "b1" "k") "v"))
     (is (= ["k"] (s :keys "b1")))
@@ -50,7 +50,7 @@
 
 (deftest fs-store-test
   (let [root (java.io.File. ".")
-	s (-> (mk-store {"fs" (fs-bucket (.getAbsolutePath root))}) )]
+        s (-> (mk-store {"fs" (fs-bucket (.getAbsolutePath root))}) )]
     (s :put "fs" "my-key" 2)
     (is (.exists (java.io.File. root "my-key")))
     (is (= (s :get "fs" "my-key") 2))
@@ -88,7 +88,7 @@
 (deftest ^{:system true :riak true}
   riak-store-test
   (let [s (mk-riak-store ["b1","b2","b3"])
-	f (partial s :get)]
+        f (partial s :get)]
     (s :put "b1" "k" "v")
     (is (= (f "b1" "k") "v"))
     (is (= ["k"] (s :keys "b1")))

@@ -25,7 +25,19 @@
   (let [db (bdb-open :env-path "/tmp/bdbtest/" :bucket "bdb_test")]
     (bdb-put db "k" "v"))
   (let [db-read (bdb-open :env-path "/tmp/bdbtest" :bucket "bdb_test"
-			  :read-only-db true)]
+                          :read-only-db true)]
+    (is (= "v" (bdb-get db-read "k")))))
+
+(deftest bdb-deferred-write-test
+  (ensure-test-directory)
+  (let [db (bdb-open :env-path "/tmp/bdbtest/"
+                    :bucket "bdb_test_deferred"
+                    :deferred-write true)]
+    (bdb-put db "k" "v")
+    (.close db))
+  (let [db-read (bdb-open :env-path "/tmp/bdbtest/"
+                          :bucket "bdb_test_deferred"
+                          :deferred-write false)]
     (is (= "v" (bdb-get db-read "k")))))
 
 (deftest;; ^{:system true :bdb true}

@@ -19,7 +19,9 @@
   (bucket-seq [this] "seq of [k v] elems")
   (bucket-delete [this k] "remove key-value pair")
   (bucket-exists? [this k] "does key-value pair exists")
-  (bucket-update [this k f]))
+  (bucket-update [this k f])
+  (bucket-sync [this])
+  (bucket-close [this]))
 
 ;; Redis
 
@@ -66,48 +68,50 @@
      :as spec}]
      (let [jedis-pool (atom nil)]
        (reify IBucket
-	      (bucket-get [this k]
-		  (ensure-jedis-pool jedis-pool host port timeout num-clients)	  
-		  (with-jedis-client @jedis-pool  pool-timeout retry-count
-		    (fn [^Jedis c]
-		      (when-let [v (.get c (mk-key bucket k))]
-		       (read-string v)))))
+              (bucket-get [this k]
+                          (ensure-jedis-pool jedis-pool host port timeout num-clients)	  
+                          (with-jedis-client @jedis-pool  pool-timeout retry-count
+                            (fn [^Jedis c]
+                              (when-let [v (.get c (mk-key bucket k))]
+                                (read-string v)))))
 
-	      (bucket-put [this k v]
-		  (ensure-jedis-pool jedis-pool host port timeout num-clients)	  
-		  (with-jedis-client @jedis-pool  pool-timeout retry-count
-		    (fn [^Jedis c] (.set c (mk-key bucket k) (pr-str v)))))
-	      
-	      (bucket-keys [this]
-		  (ensure-jedis-pool jedis-pool host port timeout num-clients)	  
-		  (with-jedis-client @jedis-pool pool-timeout retry-count
-		    (fn [^Jedis c]
-		      (let [prefix-ln (inc (.length bucket))]
-			(doall (map #(.substring ^String % prefix-ln)
-				    (.keys c (format "%s:*" bucket))))))))
+              (bucket-put [this k v]
+                          (ensure-jedis-pool jedis-pool host port timeout num-clients)	  
+                          (with-jedis-client @jedis-pool  pool-timeout retry-count
+                            (fn [^Jedis c] (.set c (mk-key bucket k) (pr-str v)))))
+              
+              (bucket-keys [this]
+                           (ensure-jedis-pool jedis-pool host port timeout num-clients)	  
+                           (with-jedis-client @jedis-pool pool-timeout retry-count
+                             (fn [^Jedis c]
+                               (let [prefix-ln (inc (.length bucket))]
+                                 (doall (map #(.substring ^String % prefix-ln)
+                                             (.keys c (format "%s:*" bucket))))))))
 
-	      (bucket-update [this k f]
-		   (default-bucket-update this k f))
+              (bucket-update [this k f]
+                             (default-bucket-update this k f))
 
-	      (bucket-seq [this] (default-bucket-seq this))
-	      	      
-	      (bucket-delete [this k]
-		  (ensure-jedis-pool jedis-pool host port timeout num-clients)	  
-		  (with-jedis-client @jedis-pool pool-timeout retry-count
-		    (fn [^Jedis c] (.del c (into-array [(mk-key bucket k)])))))
-	      
-	      (bucket-exists? [this k]
-		  (ensure-jedis-pool jedis-pool host port timeout num-clients)
-		  (default-bucket-exists? this k)
-		  #_(with-jedis-client @jedis-pool pool-timeout retry-count
-		    (fn [^Jedis c] (.exists c (mk-key bucket k)))))))))
+              (bucket-seq [this] (default-bucket-seq this))
+              
+              (bucket-delete [this k]
+                             (ensure-jedis-pool jedis-pool host port timeout num-clients)	  
+                             (with-jedis-client @jedis-pool pool-timeout retry-count
+                               (fn [^Jedis c] (.del c (into-array [(mk-key bucket k)])))))
+              
+              (bucket-exists? [this k]
+                              (ensure-jedis-pool jedis-pool host port timeout num-clients)
+                              (default-bucket-exists? this k)
+                              #_(with-jedis-client @jedis-pool pool-timeout retry-count
+                                  (fn [^Jedis c] (.exists c (mk-key bucket k)))))
+              (bucket-sync [this] nil)
+              (bucket-close [this] (.destroy jedis-pool))))))
 
 ;; Riak
 
 (defn riak-bucket [& {:keys [server,name,port,prefix,bucket-config]
-		      :or {server "http://127.0.0.1"
-			   prefix "riak"
-			   port 8098}}]
+                      :or {server "http://127.0.0.1"
+                           prefix "riak"
+                           port 8098}}]
   ;; Bucket config
   (let [req-base [(str server ":" port) prefix (ring/url-encode name)]
         mk-path #(str/join "/" (concat req-base %&))
@@ -115,38 +119,44 @@
                          :content-type "application/json" :accepts :json})]
     ;; IBucket Implementatin
     (reify IBucket
-	   (bucket-get
-	    [this k]
-	    (-log> k str ring/url-encode mk-path client/get
-             :body (json/parse-string)))
-	   (bucket-put
-	    [this k v]
-	    (-> k str ring/url-encode mk-path (client/post (mk-json v))))  
-	   (bucket-delete
-	    [this k]
-	    (-> k ring/url-encode mk-path client/delete))	  
-	   (bucket-seq
-	    [this]
-	    (default-bucket-seq this))
-	   (bucket-keys
-	    [this]
-      (-> (mk-path)
-          (client/get {:query-params {"keys" "stream"}
-                       :chunked? true})
-          :body
-          clojure.string/join
-          java.io.StringReader.
-          java.io.BufferedReader.
-          json/parsed-seq
-          ((partial apply merge-with concat))
-          (get "keys")
-	  ((partial map ring/url-decode))))
-	   (bucket-exists?
-	    [this k]
-	    (default-bucket-exists? this k))
-	   (bucket-update
-	    [this k f]
-	    (default-bucket-update this k f)))))
+           (bucket-get
+            [this k]
+            (-log> k str ring/url-encode mk-path client/get
+                   :body (json/parse-string)))
+           (bucket-put
+            [this k v]
+            (-> k str ring/url-encode mk-path (client/post (mk-json v))))  
+           (bucket-delete
+            [this k]
+            (-> k ring/url-encode mk-path client/delete))	  
+           (bucket-seq
+            [this]
+            (default-bucket-seq this))
+           (bucket-keys
+            [this]
+            (-> (mk-path)
+                (client/get {:query-params {"keys" "stream"}
+                             :chunked? true})
+                :body
+                clojure.string/join
+                java.io.StringReader.
+                java.io.BufferedReader.
+                json/parsed-seq
+                ((partial apply merge-with concat))
+                (get "keys")
+                ((partial map ring/url-decode))))
+           (bucket-exists?
+            [this k]
+            (default-bucket-exists? this k))
+           (bucket-update
+            [this k f]
+            (default-bucket-update this k f))
+           (bucket-sync
+            [this]
+            nil)
+           (bucket-close
+            [this]
+            nil))))
 
 (comment
   (def b (riak-bucket :name "b"))
@@ -161,31 +171,33 @@
 ;; File System
 
 (defn fs-bucket [^String dir-path]
-  ; ensure directory exists
+  ;; ensure directory exists
   (let [f (java.io.File. dir-path)]
     (.mkdirs f)
     (reify IBucket
-	   (bucket-get [this k]
-		       (let [f (java.io.File. f ^String (ring/url-encode k))]
-			 (when (.exists f) (-> f slurp read-string))))
-	   (bucket-put [this k v]
-		       (let [f (java.io.File. f ^String(ring/url-encode k))]
-			 (spit f (pr-str v))))
-	   (bucket-exists? [this k]		
-			   (let [f (java.io.File. f ^String (ring/url-encode k))]
-			     (.exists f)))
-	   (bucket-delete [this k]
-			  (let [f (java.io.File. f ^String (ring/url-encode  k))]
-			    (.delete f)))
+           (bucket-get [this k]
+                       (let [f (java.io.File. f ^String (ring/url-encode k))]
+                         (when (.exists f) (-> f slurp read-string))))
+           (bucket-put [this k v]
+                       (let [f (java.io.File. f ^String(ring/url-encode k))]
+                         (spit f (pr-str v))))
+           (bucket-exists? [this k]		
+                           (let [f (java.io.File. f ^String (ring/url-encode k))]
+                             (.exists f)))
+           (bucket-delete [this k]
+                          (let [f (java.io.File. f ^String (ring/url-encode  k))]
+                            (.delete f)))
 
-	   (bucket-seq [this] (default-bucket-seq this))
-	 
-	   (bucket-keys [this]
-			(for [^java.io.File c (.listFiles f)
-			      :when (and (.isFile c) (not (.isHidden c)))]
-			  (ring/url-decode (.getName c))))
-	   (bucket-update [this k f]
-			  (default-bucket-update this k f)))))
+           (bucket-seq [this] (default-bucket-seq this))
+           
+           (bucket-keys [this]
+                        (for [^java.io.File c (.listFiles f)
+                              :when (and (.isFile c) (not (.isHidden c)))]
+                          (ring/url-decode (.getName c))))
+           (bucket-update [this k f]
+                          (default-bucket-update this k f))
+           (bucket-sync [this] nil)
+           (bucket-close [this] nil))))
 
 ;; ConcurrentHashMap
 
@@ -199,14 +211,16 @@
                         (.put h k (pr-str v)))
             (bucket-keys [this] (enumeration-seq (.keys h)))
             (bucket-get [this k] (when-let [v (.get h k)] (read-string v)))
-	    (bucket-seq [this] (for [^java.util.Map$Entry e (seq h)]
-				 [(.getKey e) (read-string (.getValue e))]))
+            (bucket-seq [this] (for [^java.util.Map$Entry e (seq h)]
+                                 [(.getKey e) (read-string (.getValue e))]))
             (bucket-delete [this k]
                            (.remove h k))
             (bucket-exists? [this k]
                             (.containsKey h k))
-	    (bucket-update [this k f]
-			   (default-bucket-update this k f)))))
+            (bucket-update [this k f]
+                           (default-bucket-update this k f))
+            (bucket-sync [this] nil)
+            (bucket-close [this] nil))))
 
 ;; S3
 
@@ -216,19 +230,19 @@
   [s3 bucket-name]
   (reify IBucket
          (bucket-put [this k v]
-		     (put-clj s3 bucket-name (str k) v))
+                     (put-clj s3 bucket-name (str k) v))
          (bucket-keys [this]
-		      (get-keys s3 bucket-name))
+                      (get-keys s3 bucket-name))
          (bucket-get [this k]
-		     (get-clj s3 bucket-name (str k)))
-	 (bucket-seq [this] (default-bucket-seq this))	 
+                     (get-clj s3 bucket-name (str k)))
+         (bucket-seq [this] (default-bucket-seq this))	 
          (bucket-delete [this k]
-			(delete-object s3 bucket-name (str k)))	 
+                        (delete-object s3 bucket-name (str k)))	 
          (bucket-exists? [this k]
                          (some #(= k (.getKey %))
                                (-?> s3 (objects bucket-name (str k)) seq)))
-	 (bucket-update [this k f]
-			(default-bucket-update this k f))))
+         (bucket-update [this k f]
+                        (default-bucket-update this k f))))
 
 
 ;; Generic Buckets
@@ -241,13 +255,15 @@
                      (bucket-get read-bucket-impl k))
          (bucket-put [this k v]
                      (bucket-put write-bucket-impl k v))
-	 (bucket-seq [this] (bucket-seq read-bucket-impl))
+         (bucket-seq [this] (bucket-seq read-bucket-impl))
          (bucket-exists? [this k]
                          (bucket-exists? read-bucket-impl k))
          (bucket-delete [this k]
                         (bucket-delete write-bucket-impl k))
          (bucket-keys [this]
-                      (bucket-keys read-bucket-impl))))
+                      (bucket-keys read-bucket-impl))
+         (bucket-sync [this] nil)
+         (bucket-close [this] nil)))
 
 (defn clear-bucket!
   [store bucket-name & {:keys [threads] :or {threads 20}}]
@@ -278,20 +294,22 @@
   [bucket-map]
   (fn [op bucket-name & args]
     (let [bucket (bucket-map bucket-name)
-	  bucket-op (case op
-                        :get bucket-get
-			:seq bucket-seq
-			:bucket nil
-                        :put bucket-put
-			:update bucket-update
-                        :keys bucket-keys
-                        :exists? bucket-exists?
-                        :delete bucket-delete)]
+          bucket-op (case op
+                          :get bucket-get
+                          :seq bucket-seq
+                          :bucket nil
+                          :put bucket-put
+                          :update bucket-update
+                          :keys bucket-keys
+                          :exists? bucket-exists?
+                          :delete bucket-delete
+                          :sync bucket-sync
+                          :close bucket-close)]
       (when (nil? bucket)
-	(throw (RuntimeException. (format "Bucket doesn't exist: %s" bucket-name))))
+        (throw (RuntimeException. (format "Bucket doesn't exist: %s" bucket-name))))
       (if (= :bucket op)
-	bucket
-	(apply bucket-op bucket args)))))
+        bucket
+        (apply bucket-op bucket args)))))
 
 ; This is for a single bucket, so only a single client per-bucket
 (def default-redis-config
