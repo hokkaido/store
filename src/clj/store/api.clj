@@ -288,7 +288,8 @@
      (s :exists? \"bucket\" \"key\")
      (s :delete \"bucket\" \"key\") delete [k v] in bucket
      (s :keys \"bucket\") returns seq of keys for bucket
-     (s :bucket \"bucket\") returns bucket impl 
+     (s :bucket \"bucket\") returns bucket impl
+     (s :get-ensure \"bucket\" \"key\" get-fn)
   The first 6  ops correspond to bucket-{get,seq,get,exists?,delete,keys} respectively
   on the specific bucket"    
   [bucket-map]
@@ -301,6 +302,13 @@
                           :put bucket-put
                           :update bucket-update
                           :keys bucket-keys
+			  :get-ensure
+			    (fn [bucket key default-fn]
+			      (if-let [v (bucket-get bucket key)]
+				v
+				(let [res (default-fn)]
+				  (bucket-put bucket key res)
+				  res)))
                           :exists? bucket-exists?
                           :delete bucket-delete
                           :sync bucket-sync
