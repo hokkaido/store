@@ -13,7 +13,7 @@
 
 (deftest bdb-basics
   (ensure-test-directory)
-  (let [db (bdb-open :env-path "/tmp/bdbtest/" :bucket "bdb_test")
+  (let [db (bdb-db "bdb_test" (bdb-env :path "/tmp/bdbtest/"))
 	_ (bdb-put db :foo [1 2 3])]
     (is (= [1 2 3] (bdb-get db :foo)))
     (is (= [:foo [1 2 3]] (first (entries-seq db))))
@@ -22,26 +22,24 @@
 
 (deftest bdb-read-only-test
   (ensure-test-directory)
-  (let [db (bdb-open :env-path "/tmp/bdbtest/" :bucket "bdb_test")]
+  (let [db (bdb-db "bdb_test" (bdb-env :path "/tmp/bdbtest/"))]
     (bdb-put db "k" "v"))
-  (let [db-read (bdb-open :env-path "/tmp/bdbtest" :bucket "bdb_test"
-                          :read-only-db true)]
+  (let [db-read (bdb-db "bdb_test" (bdb-env :path "/tmp/bdbtest/")
+                        :read-only true)]
     (is (= "v" (bdb-get db-read "k")))))
 
 (deftest bdb-deferred-write-test
   (ensure-test-directory)
-  (let [db (bdb-open :env-path "/tmp/bdbtest/"
-                    :bucket "bdb_test_deferred"
-                    :deferred-write true)]
+  (let [db (bdb-db "bdb_test_deferred" (bdb-env :path "/tmp/bdbtest/")
+                   :deferred-write true)]
     (bdb-put db "k" "v")
     (.close db))
-  (let [db-read (bdb-open :env-path "/tmp/bdbtest/"
-                          :bucket "bdb_test_deferred"
-                          :deferred-write false)]
+  (let [db-read (bdb-db "bdb_test_deferred" (bdb-env :path "/tmp/bdbtest/")
+                   :deferred-write false)]
     (is (= "v" (bdb-get db-read "k")))))
 
 (deftest;; ^{:system true :bdb true}
     bdb-bucket-test
   (ensure-test-directory)
-  (let [b (bdb-bucket :bucket "bdb_test" :env-path "/tmp/bdbtest")]
+  (let [b (bdb-bucket (bdb-db "bdb_test" (bdb-env :path "/tmp/bdbtest")))]
     (generic-bucket-test b)))

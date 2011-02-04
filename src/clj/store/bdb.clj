@@ -8,7 +8,8 @@
                              OperationStatus
                              CheckpointConfig
                              CacheMode))
-  (:use store.api))
+  (:use store.api
+        [clojure.java.io :only [file]]))
 
 ;;http://download.oracle.com/docs/cd/E17277_02/html/GettingStartedGuide
 
@@ -59,19 +60,6 @@
 ;;http://download.oracle.com/docs/cd/E17076_02/html/java/com/sleepycat/db/EnvironmentConfig.html
 ;;http://download.oracle.com/docs/cd/E17076_02/html/java/com/sleepycat/db/EnvironmentConfig.html
 
-(defn bdb-env [env-path read-only-env
-               checkpoint-kb checkpoint-mins
-               locking cache-percent]
-  (let [env-config (doto (EnvironmentConfig.)
-                     (.setReadOnly read-only-env)
-                     (.setAllowCreate (not read-only-env))
-                     (.setLocking locking)
-                     (.setCachePercent cache-percent))]
-    (doto CheckpointConfig/DEFAULT
-      (.setKBytes checkpoint-kb)
-      (.setMinutes checkpoint-mins))
-    (-> env-path java.io.File. (Environment. env-config))))
-
 (defn bdb-conf [read-only-db deferred-write cache-mode]
   (let []
     (doto (DatabaseConfig.)
@@ -80,56 +68,62 @@
       (.setDeferredWrite deferred-write)
       (.setCacheMode (cache-modes cache-mode)))))
 
-(defn open-db [db-env db-conf bucket]
-  (.openDatabase db-env nil bucket db-conf))
-
-(defn bdb-open
+(defn bdb-env
   "Parameters:
-   :env-path - bdb environment path
-   :bucket - bucket name
-   :read-only-env - set bdb environment to be read-only
-   :read-only-db - set db to read-only, overrides environment config
-   :deferred-write - toggle deferred writing to filesystem
-   :checkpoint - toggle checkpointing
+   :path - bdb environment path
+   :read-only - set bdb environment to be read-only
+   :checkpoint-kb - how many kb to write before checkpointing
+   :checkpoint-mins - how many mins to wait before checkpointing
    :locking - toggle locking, if turned off then the cleaner is also
-   :evict - toggle leaf node eviction in cache
-   :cache-percent - percent of heap to use for BDB cache
-   :cache-mode - eviction policy for cache"
-  [& {:keys [env-path bucket read-only-env
-             read-only-db deferred-write
+   :cache-percent - percent of heap to use for BDB cache"
+  [& {:keys [path read-only
              checkpoint-kb checkpoint-mins
-             locking evict cache-percent cache-mode]
-      :or {read-only-env false
-           read-only-db false
-           env-path "/var/bdb/"
-           deferred-write false
+             locking cache-percent]
+      :or {read-only false
+           path "/var/bdb/"
            checkpoint-kb 0 
            checkpoint-mins 0
            locking true
-           cache-percent 60
-           cache-mode :default}
-      :as opts}]
-  (let [db-env (bdb-env env-path read-only-env checkpoint-kb checkpoint-mins
-                        locking cache-percent)
-        db-conf (bdb-conf read-only-db deferred-write cache-mode)]
-    (open-db db-env db-conf bucket)))
+           cache-percent 60}}]
+  (let [env-config (doto (EnvironmentConfig.)
+                     (.setReadOnly read-only)
+                     (.setAllowCreate (not read-only))
+                     (.setLocking locking)
+                     (.setCachePercent cache-percent))]
+    (doto CheckpointConfig/DEFAULT
+      (.setKBytes checkpoint-kb)
+      (.setMinutes checkpoint-mins))
+    (Environment. (file path) env-config)))
+
+(defn bdb-db
+  "Parameters:
+   name - database name
+   :env - the database environment
+   :read-only - set db to read-only, overrides environment config
+   :deferred-write - toggle deferred writing to filesystem
+   :cache-mode - eviction policy for cache"
+  [name env & {:keys [read-only deferred-write cache-mode]
+               :or {read-only false
+                    deferred-write false
+                    cache-mode :default}}]
+  (let [db-conf (bdb-conf read-only deferred-write cache-mode)]
+    (.openDatabase env nil name db-conf)))
 
 (defn bdb-bucket
   "returns callback fn for a Berkeley DB backed bucket."
-  [& env]
-  (let [^Database db (apply bdb-open env)]
-    (reify IBucket
-	   (bucket-get [this k]
-		       (bdb-get db k))
-	   (bucket-put [this k v]
-		       (bdb-put db k v))
-	   (bucket-keys [this] (default-bucket-keys this))
-	   (bucket-seq [this]
-		       (entries-seq db))
-	   (bucket-delete [this k]
-			  (bdb-delete db k))
-	   (bucket-update [this k f]
-			  (default-bucket-update this k f))
-	   (bucket-exists? [this k] (default-bucket-exists? this k))
-     (bucket-sync [this] (.sync db))
-     (bucket-close [this] (.close db)))))
+  [^Database db]
+  (reify IBucket
+         (bucket-get [this k]
+                     (bdb-get db k))
+         (bucket-put [this k v]
+                     (bdb-put db k v))
+         (bucket-keys [this] (default-bucket-keys this))
+         (bucket-seq [this]
+                     (entries-seq db))
+         (bucket-delete [this k]
+                        (bdb-delete db k))
+         (bucket-update [this k f]
+                        (default-bucket-update this k f))
+         (bucket-exists? [this k] (default-bucket-exists? this k))
+         (bucket-sync [this] (.sync db))
+         (bucket-close [this] (.close db))))

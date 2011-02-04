@@ -35,9 +35,9 @@
 
 (defn default-bucket-update [b k f]
   (->>  k
-	(bucket-get b)
-	f
-	(bucket-put b k)))
+        (bucket-get b)
+        f
+        (bucket-put b k)))
 
 (defn default-bucket-seq [b]
   (for [k (bucket-keys b)]
