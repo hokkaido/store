@@ -95,6 +95,9 @@
       (.setMinutes checkpoint-mins))
     (Environment. (file path) env-config)))
 
+(defn bdb-env-close [^Environment env]
+  (.close env))
+
 (defn bdb-db
   "Parameters:
    name - database name
