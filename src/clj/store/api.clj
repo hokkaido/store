@@ -11,6 +11,8 @@
   (:import [java.util.concurrent ConcurrentHashMap TimeoutException]
            [redis.clients.jedis JedisPool Jedis]))
 
+(set! *warn-on-reflection* false)
+
 (defprotocol IBucket
   (bucket-get [this k] "fetch value for key")
   (bucket-put [this k v]
@@ -208,11 +210,15 @@
   ([^java.util.concurrent.ConcurrentHashMap h]
      (reify IBucket
             (bucket-put [this k v]
-                        (.put h k (pr-str v)))
-            (bucket-keys [this] (enumeration-seq (.keys h)))
-            (bucket-get [this k] (when-let [v (.get h k)] (read-string v)))
-            (bucket-seq [this] (for [^java.util.Map$Entry e (seq h)]
-                                 [(.getKey e) (read-string (.getValue e))]))
+                        (.put h k v))
+            (bucket-keys [this]
+			 (enumeration-seq (.keys h)))
+            (bucket-get [this k]
+			(.get h k))
+            (bucket-seq [this]
+			(for [^java.util.Map$Entry e
+				     (.entrySet h)]
+			  [(.getKey e) (.getValue e)]))
             (bucket-delete [this k]
                            (.remove h k))
             (bucket-exists? [this k]
