@@ -98,3 +98,19 @@
     (is (= [["k2" {:a 1}]] (s :seq "b2")))
     (is (= [["k2" {:a 1}]] (bucket-seq (s :bucket "b2"))))
     (is (= 1 (:a (s :get "b2" "k2"))))))
+
+(deftest flush-test
+  (let [b1 (hashmap-bucket)
+        b2 (hashmap-bucket)]
+    (bucket-put b1 :foo {:bar "bar"})
+    (bucket-put b1 :nutty {:mcsackhang "mcsackhang"})
+    (merge-to! merge b1 b2)
+    (is (= (into {} (bucket-seq b2))
+	   (into {} (bucket-seq b1))))))
+
+(deftest with-flush-test
+  (let [b (hashmap-bucket)
+	b-flush (with-flush b (fn [x y] y) (constantly true) 1)]
+    (bucket-put b-flush :k :v)
+    (Thread/sleep 5)
+    (is (= [[:k :v]] (bucket-seq b)))))

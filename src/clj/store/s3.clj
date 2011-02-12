@@ -3,6 +3,7 @@
 store.s3
   (:use 
         clj-serializer.core
+	store.api
 	[plumbing.core :only [with-silent]])
   (:require [clojure.contrib.duck-streams :as ds])
   (:import
@@ -167,3 +168,31 @@ store.s3
  [s3 root-bucket rest rdr]
   (let [files (without-folders (objects s3 root-bucket rest))]
     (map #(rdr s3 root-bucket (.getKey %)) files)))
+
+(defn s3-bucket
+  "Takes a S3 connection, a bucket name, and an optional map from logical
+  bucket name to actual S3 bucket name."
+  [s3 bucket-name]
+  (reify store.api.IReadBucket
+         (bucket-keys [this]
+                      (get-keys s3 bucket-name))
+         (bucket-get [this k]
+                     (get-clj s3 bucket-name (str k)))
+
+	 (bucket-exists? [this k]
+            (some #(= k (.getKey %))
+		  (-?> s3 (objects bucket-name (str k)) seq)))
+
+	 (bucket-seq [this] (default-bucket-seq this))	 
+	 
+	 store.api.IWriteBucket
+	 (bucket-put [this k v]
+                     (put-clj s3 bucket-name (str k) v))
+	 
+         (bucket-delete [this k]
+                        (delete-object s3 bucket-name (str k)))
+	          (bucket-put [this k v]
+			      (put-clj s3 bucket-name (str k) v))
+		  
+         (bucket-update [this k f]
+                        (default-bucket-update this k f))))
