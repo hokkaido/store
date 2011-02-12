@@ -53,7 +53,7 @@
                      [(from-entry k)
                       (from-entry v)]))))))
 
-(defn bdb-delete [#^Database db k]
+(defn bdb-delete [^Database db k]
   (let [entry-key (to-entry k)]
     (.delete db nil entry-key)))
 
@@ -95,8 +95,7 @@
       (.setMinutes checkpoint-mins))
     (Environment. (file path) env-config)))
 
-(defn bdb-env-close [^Environment env]
-  (.close env))
+(defn bdb-env-close [^Environment env] (.close env))  
 
 (defn bdb-db
   "Parameters:
@@ -112,21 +111,27 @@
   (let [db-conf (bdb-conf read-only deferred-write cache-mode)]
     (.openDatabase env nil name db-conf)))
 
+
 (defn bdb-bucket
   "returns callback fn for a Berkeley DB backed bucket."
   [^Database db]
-  (reify IBucket
+  (reify IReadBucket
          (bucket-get [this k]
                      (bdb-get db k))
-         (bucket-put [this k v]
-                     (bdb-put db k v))
+         
          (bucket-keys [this] (default-bucket-keys this))
          (bucket-seq [this]
                      (entries-seq db))
-         (bucket-delete [this k]
+
+	 (bucket-exists? [this k] (default-bucket-exists? this k))
+
+	 IWriteBucket
+
+	 (bucket-put [this k v]
+                     (bdb-put db k v))
+	 (bucket-delete [this k]
                         (bdb-delete db k))
          (bucket-update [this k f]
                         (default-bucket-update this k f))
-         (bucket-exists? [this k] (default-bucket-exists? this k))
          (bucket-sync [this] (.sync db))
          (bucket-close [this] (.close db))))

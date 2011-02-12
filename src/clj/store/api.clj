@@ -71,26 +71,32 @@
   ;; ensure directory exists
   (let [f (java.io.File. dir-path)]
     (.mkdirs f)
-    (reify IBucket
+    (reify IReadBucket
            (bucket-get [this k]
                        (let [f (java.io.File. f ^String (ring/url-encode k))]
                          (when (.exists f) (-> f slurp read-string))))
-           (bucket-put [this k v]
-                       (let [f (java.io.File. f ^String(ring/url-encode k))]
-                         (spit f (pr-str v))))
+
+           (bucket-seq [this] (default-bucket-seq this))
+	   
            (bucket-exists? [this k]		
                            (let [f (java.io.File. f ^String (ring/url-encode k))]
                              (.exists f)))
+
+	   (bucket-keys [this]
+                        (for [^java.io.File c (.listFiles f)
+                              :when (and (.isFile c) (not (.isHidden c)))]
+                          (ring/url-decode (.getName c))))
+
+	   IWriteBucket
+
+	   (bucket-put [this k v]
+                       (let [f (java.io.File. f ^String(ring/url-encode k))]
+                         (spit f (pr-str v))))
            (bucket-delete [this k]
                           (let [f (java.io.File. f ^String (ring/url-encode  k))]
                             (.delete f)))
 
-           (bucket-seq [this] (default-bucket-seq this))
            
-           (bucket-keys [this]
-                        (for [^java.io.File c (.listFiles f)
-                              :when (and (.isFile c) (not (.isHidden c)))]
-                          (ring/url-decode (.getName c))))
            (bucket-update [this k f]
                           (default-bucket-update this k f))
            (bucket-sync [this] nil)
@@ -101,9 +107,8 @@
      (let [h (ConcurrentHashMap.)]
        (hashmap-bucket h)))
   ([^java.util.concurrent.ConcurrentHashMap h]
-     (reify IBucket
-            (bucket-put [this k v]
-                        (.put h k v))
+     (reify IReadBucket
+
             (bucket-keys [this]
 			 (enumeration-seq (.keys h)))
             (bucket-get [this k]
@@ -112,10 +117,15 @@
 			(for [^java.util.Map$Entry e
 				     (.entrySet h)]
 			  [(.getKey e) (.getValue e)]))
+
+	    (bucket-exists? [this k]
+                            (.containsKey h k))
+
+	    IWriteBucket
+	    (bucket-put [this k v]
+                        (.put h k v))
             (bucket-delete [this k]
                            (.remove h k))
-            (bucket-exists? [this k]
-                            (.containsKey h k))
             (bucket-update [this k f]
                            (default-bucket-update this k f))
             (bucket-sync [this] nil)

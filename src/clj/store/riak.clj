@@ -1,7 +1,8 @@
 (ns store.riak
-  (:use store.api)
+  (:use store.api plumbing.core)
   (:require [clj-http.client :as client]
 	    [ring.util.codec :as ring]
+	    [clojure.string :as str]
 	    [clj-json.core :as json]))
 
 (defn riak-bucket [& {:keys [server,name,port,prefix,bucket-config]

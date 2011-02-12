@@ -1,7 +1,9 @@
 (ns store.core-test
   (:use clojure.test
         store.api
-        [plumbing.core :only [find-first]]))
+	store.redis
+	store.riak
+        [plumbing.core :only [find-first map-from-keys]]))
 
 (defn generic-bucket-test [b]
   (bucket-put b "k1" "v1")
@@ -38,7 +40,8 @@
   (generic-bucket-test (hashmap-bucket)))
 
 (deftest hashmap-store-test
-  (generic-store-test mk-hashmap-store)
+  (generic-store-test (fn [names]
+			(mk-store (map-from-keys (fn [& _] (hashmap-bucket)) names))))
   (let [s (mk-store {"b1" (hashmap-bucket)})]
     (s :put "b1" "k" "v")    
     (is (= ["k"] (s :keys "b1")))
@@ -63,31 +66,18 @@
 
 (deftest ^{:system true :redis true}
   redis-store-test
-  (generic-store-test mk-redis-store)
-  (let [s (mk-redis-store ["b1" "b2"])]
+  (generic-store-test (fn [names]
+			(map-from-keys redis-bucket names)))
+  (let [s (mk-store
+	   (map-from-keys redis-bucket ["b1" "b2"]))]
     (s :put "b1" "k" "v")
     (is (= "v" (s :get "b1" "k")))))
 
-(deftest ^{:system true :riak true}
-  riak-bucket-test
-  (let [b (riak-bucket :name "b")]
-    (bucket-put b "k1" "v1")
-    (is (= (bucket-get b "k1") "v1"))
-    (is (find-first (partial = "k1") (bucket-keys b)))
-    (is (bucket-exists? b "k1"))
-    (bucket-delete b "k1")
-    (is (not (bucket-exists? b "k1")))
-    (bucket-put b "k2" {:a 1})
-    (is (= 1 (-> b (bucket-get "k2") :a)))
-    (Thread/sleep 1000)
-    (bucket-put b "k2" 2)
-    (is (= 2 (bucket-get b "k2")))
-    (is (= [["k2",2]] (bucket-seq b)))
-    (is (nil? (bucket-get b "dne")))))
 
 (deftest ^{:system true :riak true}
   riak-store-test
-  (let [s (mk-riak-store ["b1","b2","b3"])
+  (let [s (map-from-keys (fn [n]
+			   (riak-bucket :name n)) ["b1","b2","b3"])
         f (partial s :get)]
     (s :put "b1" "k" "v")
     (is (= (f "b1" "k") "v"))
@@ -104,13 +94,13 @@
         b2 (hashmap-bucket)]
     (bucket-put b1 :foo {:bar "bar"})
     (bucket-put b1 :nutty {:mcsackhang "mcsackhang"})
-    (merge-to! merge b1 b2)
+    (bucket-merge-to! merge b1 b2)
     (is (= (into {} (bucket-seq b2))
 	   (into {} (bucket-seq b1))))))
 
-(deftest with-flush-test
-  (let [b (hashmap-bucket)
-	b-flush (with-flush b (fn [x y] y) (constantly true) 1)]
-    (bucket-put b-flush :k :v)
-    (Thread/sleep 5)
-    (is (= [[:k :v]] (bucket-seq b)))))
+;; (deftest with-flush-test
+;;   (let [b (hashmap-bucket)
+;; 	b-flush (with-flush b (fn [x y] y) (constantly true) 1)]
+;;     (bucket-put b-flush :k :v)
+;;     (Thread/sleep 5)
+;;     (is (= [[:k :v]] (bucket-seq b)))))

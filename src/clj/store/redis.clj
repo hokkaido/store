@@ -1,5 +1,6 @@
 (ns store.redis
-  (:use store.api)
+  (:use store.api
+	[plumbing.core :only [-->> with-log with-retries]])
   (:import [redis.clients.jedis JedisPool Jedis]))
            
 (defn- mk-key [bucket key] (format "%s:%s" bucket key))
