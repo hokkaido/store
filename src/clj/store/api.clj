@@ -3,7 +3,6 @@
   (:require 
             [ring.util.codec :as ring]
             [clojure.string :as str]
-            [work.core :as work]
             [clj-json.core :as json])
   (:import [java.util.concurrent ConcurrentHashMap]))
 
