@@ -46,14 +46,6 @@
 
 ;;; Generic Buckets
 
-(defn clear-bucket!
-  [store bucket-name & {:keys [threads] :or {threads 20}}]
-  (let [b (store :bucket bucket-name)]
-    (work/map-work
-     (partial bucket-delete b)
-     threads
-     (bucket-keys b))))
-
 (defn copy-bucket [src dst]
   (doseq [k (bucket-keys src)]
     (bucket-put dst k (bucket-get src k))))
