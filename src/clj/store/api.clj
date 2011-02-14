@@ -118,7 +118,14 @@
             (bucket-delete [this k]
                            (.remove h k))
             (bucket-update [this k f]
-                           (default-bucket-update this k f))
+		(loop []
+		  (let [v (.get h k) new-v (f v)			
+			replaced? (cond
+				    (nil? v) (nil? (.putIfAbsent h k new-v))
+				    (nil? new-v) (.remove h k v)
+				    :else (.replace h k v new-v))]
+		    (when (not replaced?)
+		      (recur)))))
             (bucket-sync [this] nil)
             (bucket-close [this] nil))))
 
