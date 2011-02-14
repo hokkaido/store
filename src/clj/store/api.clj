@@ -122,7 +122,7 @@
 		  (let [v (.get h k) new-v (f v)			
 			replaced? (cond
 				    (nil? v) (nil? (.putIfAbsent h k new-v))
-				    (nil? new-v) (.remove h k v)
+				    (nil? new-v) (or (nil? v) (.remove h k v))
 				    :else (.replace h k v new-v))]
 		    (when (not replaced?)
 		      (recur)))))
