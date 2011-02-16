@@ -1,7 +1,6 @@
 (ns store.core-test
   (:use clojure.test
         store.api
-	store.redis
 	store.riak
         [plumbing.core :only [find-first map-from-keys]]))
 
@@ -60,24 +59,25 @@
     (s :delete "fs" "my-key")
     (is (not (.exists (java.io.File. root "my-key"))))))
 
-(deftest ^{:system true :redis true}
-  redis-bucket-test
-  (generic-bucket-test (redis-bucket "b" default-redis-config)))
+;; (deftest ^{:system true :redis true}
+;;   redis-bucket-test
+;;   (generic-bucket-test (redis-bucket "b" default-redis-config)))
 
-(deftest ^{:system true :redis true}
-  redis-store-test
-  (generic-store-test (fn [names]
-			(map-from-keys redis-bucket names)))
-  (let [s (mk-store
-	   (map-from-keys redis-bucket ["b1" "b2"]))]
-    (s :put "b1" "k" "v")
-    (is (= "v" (s :get "b1" "k")))))
+;; (deftest ^{:system true :redis true}
+;;   redis-store-test
+;;   (generic-store-test (fn [names]
+;; 			(map-from-keys redis-bucket names)))
+;;   (let [s (mk-store
+;; 	   (map-from-keys redis-bucket ["b1" "b2"]))]
+;;     (s :put "b1" "k" "v")
+;;     (is (= "v" (s :get "b1" "k")))))
 
 
 (deftest ^{:system true :riak true}
   riak-store-test
-  (let [s (map-from-keys (fn [n]
-			   (riak-bucket :name n)) ["b1","b2","b3"])
+  (let [s (mk-store (map-from-keys
+		     (fn [n]
+		       (riak-bucket :name n)) ["b1","b2","b3"]))
         f (partial s :get)]
     (s :put "b1" "k" "v")
     (is (= (f "b1" "k") "v"))
@@ -94,7 +94,7 @@
         b2 (hashmap-bucket)]
     (bucket-put b1 :foo {:bar "bar"})
     (bucket-put b1 :nutty {:mcsackhang "mcsackhang"})
-    (bucket-merge-to! merge b1 b2)
+    (bucket-merge-to! (fn [k v1 v2] (merge v1 v2)) b1 b2)
     (is (= (into {} (bucket-seq b2))
 	   (into {} (bucket-seq b1))))))
 

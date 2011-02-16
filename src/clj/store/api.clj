@@ -50,10 +50,11 @@
     (bucket-put dst k (bucket-get src k))))
 
 (defn bucket-merge-to!
-  [merge from to]
+  "merge takes (k to-value from-value)"
+  [merge-fn from to]
   (doseq [[k v] (bucket-seq from)]
     (bucket-update to k
-		   (rpartial merge v)))
+		   (fn [v-to] (merge-fn k v-to v))))
   to)
 
 ;;; Simple Buckets
