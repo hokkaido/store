@@ -1,4 +1,4 @@
-(defproject store "0.1.8-SNAPSHOT"
+(defproject store "0.1.9-SNAPSHOT"
   :description "Distributed Datastorage Abstraction"
   :dependencies [[org.clojure/clojure "1.2.0"]
                  [org.clojure/clojure-contrib "1.2.0"]
@@ -7,7 +7,7 @@
                  [org.clojars.mattrepl/jedis "1.3.2-SNAPSHOT"]
                  [clj-serializer  "0.1.1"]
                  [clj-sys/plumbing "0.1.3-SNAPSHOT"]
-                 [woven/clj-http "0.1.2-SNAPSHOT"]
+                 [woven/clj-http "0.1.2-chunked-SNAPSHOT"]
                  [ring/ring-core "0.3.1"]
                  [clomert "0.2.0"]
                  [com.sleepycat/je "4.1.7"]

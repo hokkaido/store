@@ -1,15 +1,19 @@
 (ns store.bdb
-  (:import (com.sleepycat.je Database 
-                             DatabaseEntry
-                             LockMode
-                             Environment
-                             EnvironmentConfig
-                             DatabaseConfig
-                             OperationStatus
-                             CheckpointConfig
-                             CacheMode))
   (:use store.api
-        [clojure.java.io :only [file]]))
+        [clojure.java.io :only [file copy]]
+	[clojure.contrib.shell :only [sh]])
+  (:import [com.sleepycat.je
+	    Database 
+	    DatabaseEntry
+	    LockMode
+	    Environment
+	    EnvironmentConfig
+	    DatabaseConfig
+	    OperationStatus
+	    CheckpointConfig
+	    CacheMode]
+	   [com.sleepycat.je.util
+	     DbBackup]))
 
 ;;http://download.oracle.com/docs/cd/E17277_02/html/GettingStartedGuide
 
@@ -94,6 +98,31 @@
       (.setKBytes checkpoint-kb)
       (.setMinutes checkpoint-mins))
     (Environment. (file path) env-config)))
+
+(defn ^long bdb-env-backup
+  "backup bdb environment to another location. pauses
+   the addition or deletion of files. returns the id
+   of the last file in the backup. needed to do continuous backups
+   options
+  :delete delete the existing backup
+  :last-id last id of backup. pass this option in to only
+  back up new files"
+  [^Environment env ^String copy-path &
+   {:keys [delete? last-id] :or {delete true}}]
+  (when delete?
+    (sh "rm" "-fr" copy-path))
+  (sh "mkdir" "-p" copy-path)
+  (let [backup (if last-id
+		 (DbBackup. env ^long last-id)
+		 (DbBackup. env))]
+    (.startBackup backup)
+    (doseq [path (.getLogFilesInBackupSet backup)
+	    :let [src (java.io.File. (.getHome env) path)
+		  dst (java.io.File. copy-path path)]]
+      (copy src dst))
+    (let [ret (.getLastFileInBackupSet backup)]
+      (.endBackup backup)
+      ret)))
 
 (defn bdb-env-close [^Environment env] (.close env))  
 

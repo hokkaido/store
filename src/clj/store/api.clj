@@ -50,10 +50,11 @@
     (bucket-put dst k (bucket-get src k))))
 
 (defn bucket-merge-to!
-  [merge from to]
+  "merge takes (k to-value from-value)"
+  [merge-fn from to]
   (doseq [[k v] (bucket-seq from)]
     (bucket-update to k
-		   (rpartial merge v)))
+		   (fn [v-to] (merge-fn k v-to v))))
   to)
 
 ;;; Simple Buckets
@@ -118,7 +119,14 @@
             (bucket-delete [this k]
                            (.remove h k))
             (bucket-update [this k f]
-                           (default-bucket-update this k f))
+		(loop []
+		  (let [v (.get h k) new-v (f v)			
+			replaced? (cond
+				    (nil? v) (nil? (.putIfAbsent h k new-v))
+				    (nil? new-v) (or (nil? v) (.remove h k v))
+				    :else (.replace h k v new-v))]
+		    (when (not replaced?)
+		      (recur)))))
             (bucket-sync [this] nil)
             (bucket-close [this] nil))))
 
