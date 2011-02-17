@@ -78,20 +78,24 @@
    :read-only - set bdb environment to be read-only
    :checkpoint-kb - how many kb to write before checkpointing
    :checkpoint-mins - how many mins to wait before checkpointing
+   :clean-util-thresh - % to trigger log file cleaning (higher means cleaner)
    :locking - toggle locking, if turned off then the cleaner is also
    :cache-percent - percent of heap to use for BDB cache"
   [& {:keys [path read-only
              checkpoint-kb checkpoint-mins
-             locking cache-percent]
+             locking cache-percent clean-util-thresh]
       :or {read-only false
            path "/var/bdb/"
            checkpoint-kb 0 
            checkpoint-mins 0
+	   clean-util-thresh 5
            locking true
            cache-percent 60}}]
   (let [env-config (doto (EnvironmentConfig.)
                      (.setReadOnly read-only)
                      (.setAllowCreate (not read-only))
+		     (.setConfigParam (EnvironmentConfig/CLEANER_MIN_FILE_UTILIZATION)
+				      (str clean-util-thresh))
                      (.setLocking locking)
                      (.setCachePercent cache-percent))]
     (doto CheckpointConfig/DEFAULT
