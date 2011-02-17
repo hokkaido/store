@@ -83,19 +83,27 @@
    :cache-percent - percent of heap to use for BDB cache"
   [& {:keys [path read-only
              checkpoint-kb checkpoint-mins
-             locking cache-percent clean-util-thresh]
+	     num-cleaner-threads 
+             locking cache-percent clean-util-thresh
+	     checkpoint-high-priority?]
       :or {read-only false
            path "/var/bdb/"
-           checkpoint-kb 0 
+           checkpoint-kb 0
+	   num-cleaner-threads 1
            checkpoint-mins 0
-	   clean-util-thresh 5
+	   clean-util-thresh 50
+	   checkpoint-high-priority? false
            locking true
            cache-percent 60}}]
   (let [env-config (doto (EnvironmentConfig.)
                      (.setReadOnly read-only)
                      (.setAllowCreate (not read-only))
-		     (.setConfigParam (EnvironmentConfig/CLEANER_MIN_FILE_UTILIZATION)
+		     (.setConfigParam (EnvironmentConfig/CLEANER_MIN_UTILIZATION)
 				      (str clean-util-thresh))
+		     (.setConfigParam (EnvironmentConfig/CLEANER_THREADS)
+				      (str num-cleaner-threads))
+		     (.setConfigParam (EnvironmentConfig/CHECKPOINTER_HIGH_PRIORITY)
+				      (str checkpoint-high-priority?))
                      (.setLocking locking)
                      (.setCachePercent cache-percent))]
     (doto CheckpointConfig/DEFAULT
