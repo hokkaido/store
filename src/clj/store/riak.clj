@@ -25,17 +25,13 @@
             (default-bucket-seq this))
            (bucket-keys
             [this]
-            (-> (mk-path)
-                (client/get {:query-params {"keys" "stream"}
-                             :chunked? true})
-                :body
-                clojure.string/join
-                java.io.StringReader.
-                java.io.BufferedReader.
-                json/parsed-seq
-                ((partial apply merge-with concat))
-                (get "keys")
-                ((partial map ring/url-decode))))
+	    (map ring/url-decode
+	     (reduce concat
+		     (map  (comp #(get % "keys") json/parse-string)   
+			   (-> (mk-path)
+			       (client/get {:query-params {"keys" "stream"}
+					    :chunked? true})
+			       :body)))))
            (bucket-exists?
             [this k]
             (default-bucket-exists? this k))
