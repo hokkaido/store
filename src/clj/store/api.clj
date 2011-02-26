@@ -49,6 +49,11 @@
   (doseq [k (bucket-keys src)]
     (bucket-put dst k (bucket-get src k))))
 
+(defn bucket-inc [b k]
+  (bucket-update
+   b k
+   (fn [x] (if x (inc x) 1))))
+
 (defn bucket-merge-to!
   "merge takes (k to-value from-value)"
   [merge-fn from to]
@@ -202,3 +207,8 @@
 	(if (contains? read-keys op)
 	  (reads bucket)
 	  (writes bucket))))))
+
+(defn hash-buckets [keyspace]
+  (map-from-keys
+   (fn [n] (hashmap-bucket))
+   keyspace))

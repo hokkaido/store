@@ -59,3 +59,10 @@
            (bucket-close
             [this]
             nil))))
+
+(defn riak-buckets [{:keys [riak-host, riak-port]} keyspace]
+  (map-from-keys
+   (fn [n] (riak-bucket :name n
+			:server riak-host
+			:port riak-port))
+   keyspace))
