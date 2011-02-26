@@ -52,11 +52,11 @@
 (defn bucket-merge-to!
   "merge takes (k to-value from-value)"
   [merge-fn from to]
-  (doseq [[k v] (bucket-seq from)]
+  (doseq [[k v] (if (map? from) from
+		    (bucket-seq from))]
     (bucket-update to k
 		   (fn [v-to] (merge-fn k v-to v))))
   to)
-
 ;;; Simple Buckets
 
 (defn fs-bucket [^String dir-path]
@@ -130,6 +130,50 @@
             (bucket-sync [this] nil)
             (bucket-close [this] nil))))
 
+(def read-ops
+     {:get bucket-get
+      :seq bucket-seq
+      :bucket (fn [bucket & args] bucket)
+      :keys bucket-keys
+      :get-ensure
+      (fn [bucket key default-fn]
+	(if-let [v (bucket-get bucket key)]
+	  v
+	  (let [res (default-fn)]
+	    (bucket-put bucket key res)
+	    res)))
+      :exists? bucket-exists?})
+
+(def read-keys
+     #{:get
+       :seq
+       :bucket
+       :keys
+       :get-ensure
+       :exists?})
+
+(def write-ops
+     {:put bucket-put
+      :delete bucket-delete
+      :update bucket-update
+      :sync bucket-sync
+      :close bucket-close})
+
+(def write-keys
+     #{:put
+       :delete
+       :update
+       :sync
+       :close})
+
+(defn bucket-op [ops get-bucket]
+  (fn [op bucket-name & args]
+    (let [bucket (get-bucket bucket-name op)
+	  bucket-op (ops op)]
+      (when (nil? bucket)
+	(throw (RuntimeException.
+		(format "Bucket doesn't exist: %s" bucket-name))))
+      (apply bucket-op bucket args))))
 
 (defn mk-store 
   "Make a store. The store must come with a bucket-map
@@ -146,29 +190,15 @@
      (s :get-ensure \"bucket\" \"key\" get-fn)
   The first 6  ops correspond to bucket-{get,seq,get,exists?,delete,keys} respectively
   on the specific bucket"    
-  [bucket-map]
-  (fn [op bucket-name & args]
-    (let [bucket (bucket-map bucket-name)
-          bucket-op (case op
-                          :get bucket-get
-                          :seq bucket-seq
-                          :bucket nil
-                          :put bucket-put
-                          :update bucket-update
-                          :keys bucket-keys
-			  :get-ensure
-			    (fn [bucket key default-fn]
-			      (if-let [v (bucket-get bucket key)]
-				v
-				(let [res (default-fn)]
-				  (bucket-put bucket key res)
-				  res)))
-                          :exists? bucket-exists?
-                          :delete bucket-delete
-                          :sync bucket-sync
-                          :close bucket-close)]
-      (when (nil? bucket)
-        (throw (RuntimeException. (format "Bucket doesn't exist: %s" bucket-name))))
-      (if (= :bucket op)
-        bucket
-        (apply bucket-op bucket args)))))
+  ([bucket-map]
+     (bucket-op
+      (merge read-ops write-ops)
+      (fn [bucket op]
+	(bucket-map bucket))))
+  ([reads writes]
+     (bucket-op
+      (merge read-ops write-ops)
+      (fn [bucket op]
+	(if (contains? read-keys op)
+	  (reads bucket)
+	  (writes bucket))))))

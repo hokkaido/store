@@ -1,5 +1,7 @@
 (ns store.riak
-  (:use store.api plumbing.core)
+  (:use store.api
+	plumbing.core
+	plumbing.streams)
   (:require [clj-http.client :as client]
 	    [ring.util.codec :as ring]
 	    [clojure.string :as str]
@@ -25,13 +27,18 @@
             (default-bucket-seq this))
            (bucket-keys
             [this]
-	    (map ring/url-decode
-	     (reduce concat
-		     (map  (comp #(get % "keys") json/parse-string)   
-			   (-> (mk-path)
-			       (client/get {:query-params {"keys" "stream"}
-					    :chunked? true})
-			       :body)))))
+	    (iterator-seq
+	     (flat-iter
+	      (map
+	       (fn [json-str]
+		 (map ring/url-decode
+		      (-> json-str
+			  json/parse-string
+			  (get "keys"))))   
+	       (-> (mk-path)
+		   (client/get {:query-params {"keys" "stream"}
+				:chunked? true})
+		   :body)))))
            (bucket-exists?
             [this k]
             (default-bucket-exists? this k))

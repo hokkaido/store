@@ -46,8 +46,20 @@
     (is (= ["k"] (s :keys "b1")))
     (is (= "v" (s :get "b1" "k")))))
 
+(deftest asymetric-read-write
+  (let [reader (hashmap-bucket)
+	writer (hashmap-bucket)
+	store (mk-store {"a" reader} {"a" writer})]
+    (store :put "a" "k" "v")
+    (is (= nil (store :get "a" "k")))
+    (is (= "v" (bucket-get writer "k")))
+    (bucket-put reader "k1" "v1")
+    (is (= "v1" (store :get "a" "k1")))))
+
 (deftest fs-bucket-test
-  (generic-bucket-test (fs-bucket (.getAbsolutePath (java.io.File. "store-core-test-dir"))))
+  (generic-bucket-test
+   (fs-bucket
+    (.getAbsolutePath (java.io.File. "store-core-test-dir"))))
   (.deleteOnExit (java.io.File. "store-core-test-dir")))
 
 (deftest fs-store-test
@@ -96,11 +108,11 @@
     (bucket-put b1 :nutty {:mcsackhang "mcsackhang"})
     (bucket-merge-to! (fn [k v1 v2] (merge v1 v2)) b1 b2)
     (is (= (into {} (bucket-seq b2))
-	   (into {} (bucket-seq b1))))))
-
-;; (deftest with-flush-test
-;;   (let [b (hashmap-bucket)
-;; 	b-flush (with-flush b (fn [x y] y) (constantly true) 1)]
-;;     (bucket-put b-flush :k :v)
-;;     (Thread/sleep 5)
-;;     (is (= [[:k :v]] (bucket-seq b)))))
+	   (into {} (bucket-seq b1))))
+    (bucket-merge-to! (fn [k v1 v2]
+			(merge v1 v2))
+		      {:bar {:balls "deep"}} b2)
+    (is (= {:bar {:balls "deep"}
+	    :foo {:bar "bar"}
+	    :nutty {:mcsackhang "mcsackhang"}}
+	 (into {} (bucket-seq b2))))))
