@@ -52,7 +52,7 @@
 (defn bucket-inc [b k]
   (bucket-update
    b k
-   (fn [x] (if x (inc x) 1))))
+   (fnil inc 0)))
 
 (defn bucket-merge-to!
   "merge takes (k to-value from-value)"
