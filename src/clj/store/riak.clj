@@ -35,12 +35,11 @@
             (default-bucket-seq this))
            (bucket-keys
             [this]
-	    (let [json-bodys
-		  (-> (mk-path)
-			 (client/get {:query-params {"keys" "stream"}
-				      :chunked? true})
-			 :body)]
-	      decode-json-bodys))
+	    (-> (mk-path)
+		(client/get {:query-params {"keys" "stream"}
+			     :chunked? true})
+		:body
+		decode-json-bodys))
            (bucket-exists?
             [this k]
             (default-bucket-exists? this k))
