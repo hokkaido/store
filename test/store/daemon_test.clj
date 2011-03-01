@@ -14,9 +14,9 @@
                      (bucket-put "k1" "val1"))
                :b2 (hashmap-bucket)})
      (IOUtils/toInputStream
-      "*3\r\n$3\r\nGET\r\n$2\r\nb1\r\n$2\r\nk1\r\n")
+      "*3\r\n$3\r\nGET\r\n$2\r\nb1\r\n$4\r\n\"k1\"\r\n")
      baos)
-    (is (= "*1\r\n$4\r\nval1\r\n"
+    (is (= "*1\r\n$6\r\n\"val1\"\r\n"
            (String. (.toByteArray baos))))))
 
 (def client (partial client-socket "127.0.0.1" 4444))
