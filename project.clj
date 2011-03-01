@@ -11,9 +11,9 @@
                  [ring/ring-core "0.3.1"]
                  [clomert "0.2.0"]
                  [com.sleepycat/je "4.1.7"]
-                 [clj-serializer "0.1.0"]]
+                 [clj-serializer "0.1.0"]
+                 [commons-io "2.0.1"]]
   :dev-dependencies [[swank-clojure "1.3.0-SNAPSHOT"]
-                     [lein-clojars "0.5.0"]
                      [robert/hooke "1.1.0"]]
   :source-path "src/clj"
   :java-source-path "src/java"
@@ -21,8 +21,8 @@
                    :system :system
                    :redis :redis
                    :riak :riak
-		   :in-memory :in-memory
-		   :performance :performance
+                   :in-memory :in-memory
+                   :performance :performance
                    :all (fn [x] (not= x :performance))}
   :repositories {"snapshots" "http://mvn.getwoven.com/repos/woven-public-snapshots"
                  "releases" "http://mvn.getwoven.com/repos/woven-public-releases"
