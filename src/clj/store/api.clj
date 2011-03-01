@@ -23,6 +23,9 @@
   (bucket-sync [this])
   (bucket-close [this]))
 
+(defprotocol IMergableBucket
+  (bucket-merge [this k v] "merge v into current value. optional"))
+
 ;;; Default Bucket Operations
 
 (defn default-bucket-exists? [b k]
@@ -54,14 +57,21 @@
    b k
    (fnil inc 0)))
 
+(defn as-mergable [b merge-fn]
+  (reify IMergableBucket
+     (bucket-merge [this k v]
+       (bucket-update b k (fn [cur-val] (merge-fn k cur-val v))))))
+
 (defn bucket-merge-to!
   "merge takes (k to-value from-value)"
-  [merge-fn from to]
+  [from to]
+  {:pre [(satisfies? IMergableBucket to)
+	 (or (map? from) (satisfies? IReadBucket from))]}
   (doseq [[k v] (if (map? from) from
 		    (bucket-seq from))]
-    (bucket-update to k
-		   (fn [v-to] (merge-fn k v-to v))))
+    (bucket-merge to k v))
   to)
+
 ;;; Simple Buckets
 
 (defn fs-bucket [^String dir-path]
