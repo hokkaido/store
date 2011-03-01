@@ -19,7 +19,7 @@
                         "$3\r\nGET\r\n$3\r\nkey\r\n")))))
 
 (deftest read-arg-test
-  (is (= (seq (.getBytes "GET"))
+  (is (= (seq "GET")
          (seq (read-arg (IOUtils/toInputStream
                          "$3\r\nGET\r\n$3\r\nkey\r\n"))))))
 
