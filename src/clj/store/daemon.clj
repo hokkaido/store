@@ -1,5 +1,5 @@
 (ns store.daemon
-  (:require [store.api :as store])
+  (:require [store.api :as store] [clojure.contrib.logging :as log])
   (:use [plumbing.core :only [with-log]]
         [clojure.contrib.server-socket :only [create-server
                                               close-server]]
@@ -37,9 +37,7 @@
 		     (let [op-key (-> op lower-case keyword)
 			   b (buckets (-> bname keyword))
 			   bop (op-map op-key)]
-		       [(pr-str
-			 (apply bop b
-				(map read-string args)))])))]
+		       [(apply bop b args)])))]
     (fn [^InputStream is ^OutputStream os]
       (write-msg os (exec-req (read-msg is)))
       (.flush os))))

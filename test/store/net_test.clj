@@ -5,7 +5,7 @@
 	store.net)
   (:require [store.api :as store]))
 
-(deftest ^{:system true} get-put-test
+(deftest  get-put-test
   (let [s (start
            (handler {:b1 (store/hashmap-bucket)})
            :port 4444)

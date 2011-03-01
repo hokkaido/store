@@ -55,7 +55,7 @@
         buf (byte-array arg-len)]
     (.read is buf)
     (.skip is 2)
-    (String. buf)))
+    (read-string (String. buf))))
 
 (defn read-msg [^InputStream is]
   (let [arg-count (read-arg-count is)
@@ -68,15 +68,13 @@
               (format "*%d\r\n" c))))
 
 ;; TODO: bubble up serialization
-(defn write-arg [^OutputStream os arg]
-  (let [arg-str (str arg)
-        arg-len (count arg-str)]
+(defn write-arg [^OutputStream os ^String arg]
+  (let [arg-len (.length arg)]        
     (.write os (.getBytes
                 (format "$%d\r\n%s\r\n"
-                        arg-len arg-str)))))
+                        arg-len arg)))))
 
 (defn write-msg [^OutputStream os args]
   (let [num-args (count args)]
     (write-arg-count os num-args)
-    (doseq [arg args]
-      (write-arg os arg))))
+    (doseq [arg args] (write-arg os (pr-str arg)))))

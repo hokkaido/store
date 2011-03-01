@@ -32,24 +32,21 @@
     (reify
       IReadBucket
       (bucket-get [this k]
-                  (-> (client (req ["GET" name (pr-str k)]))
-                      read-string))
+                  (client (req ["GET" name k])))
       (bucket-keys [this]
                    (client (req ["KEYS" name])))
       (bucket-seq [this]
                   (client (req ["SEQ" name])))
       (bucket-exists? [this k]
-                      (client (req ["EXISTS" name (pr-str k)])))
+                      (client (req ["EXISTS" name k])))
 
       IWriteBucket
       (bucket-put [this k v]
-                  (-> (client (req ["PUT" name (pr-str k) (pr-str v)]))
-                      read-string))
+                  (client (req ["PUT" name k v])))
       (bucket-delete [this k]
-                     (-> (client (req ["DELETE" name (pr-str k)]))
-                         read-string))
+                     (client (req ["DELETE" name k])))
       (bucket-update [this k f]
-                     (client (req ["UPDATE" name (pr-str k)])))
+                     (client (req ["UPDATE" name k])))
       (bucket-sync [this]
                    (client (req ["SYNC" name])))
       (bucket-close [this]
