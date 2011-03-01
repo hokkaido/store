@@ -16,6 +16,7 @@
   (let [server (create-server port fun backlog bind-addr)]
     server))
 
+;; TODO: fix double serialization
 (def op-map
   {:get store/bucket-get
    :exists store/bucket-exists?
@@ -33,7 +34,9 @@
   (fn [^InputStream is ^OutputStream os]
     (let [[op bname & args] (read-msg is)
           op-key (-> op lower-case keyword)
-          b (buckets (keyword bname))
+          b (buckets (-> bname keyword))
           bop (op-map op-key)]
-      (write-msg os [(apply bop b args)])
+      (write-msg os [(pr-str
+                      (apply bop b
+                             (map read-string args)))])
       (.flush os))))
