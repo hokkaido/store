@@ -35,8 +35,5 @@
           op-key (-> op lower-case keyword)
           b (buckets (keyword bname))
           bop (op-map op-key)]
-      (println bop b op-key)
-      (println buckets)
-      (println op bname args)
       (write-msg os [(apply bop b args)])
       (.flush os))))

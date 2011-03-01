@@ -1,9 +1,9 @@
 (ns store.net-test
-  (:require [store.api :as store])
   (:use clojure.test
-        [store.daemon :only [start handler]]
-        [clojure.contrib.server-socket :only [close-server]])
-  (:use store.net :reload-all))
+	[store.daemon :only [start handler]]
+	[clojure.contrib.server-socket :only [close-server]]
+	store.net)
+  (:require [store.api :as store]))
 
 (deftest ^{:system true} get-put-test
   (let [s (start
