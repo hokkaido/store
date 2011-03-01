@@ -49,17 +49,17 @@
       (Integer/parseInt (.substring l 1))
       (throw (Exception. "Error parsing arg length.")))))
 
+;; TODO: bubble up serialization
 (defn read-arg [^InputStream is]
   (let [arg-len (read-arg-len is)
         buf (byte-array arg-len)]
     (.read is buf)
     (.skip is 2)
-    buf))
+    (String. buf)))
 
 (defn read-msg [^InputStream is]
   (let [arg-count (read-arg-count is)
-        args (map #(String. %)
-                  (repeatedly arg-count #(read-arg is)))]
+        args (repeatedly arg-count #(read-arg is))]
     args))
 
 
@@ -67,6 +67,7 @@
   (.write os (.getBytes
               (format "*%d\r\n" c))))
 
+;; TODO: bubble up serialization
 (defn write-arg [^OutputStream os arg]
   (let [arg-str (str arg)
         arg-len (count arg-str)]

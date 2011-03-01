@@ -12,11 +12,13 @@
         b (net-bucket :name "b1"
                       :host "127.0.0.1"
                       :port 4444)]
-    (is (= ""
+    (is (= nil
            (store/bucket-get b "k1")))
-    (is (= ""
+    (is (= nil
            (store/bucket-put b "k1" "v1")))
     (is (= "v1"
            (store/bucket-get b "k1")))
 
     (close-server s)))
+
+;;(deftest ^{:system true} timeout)
