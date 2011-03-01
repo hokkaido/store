@@ -28,18 +28,18 @@
            :port 4444)]
 
     (is (= nil
-           (read-string (client (req ["PUT" "b1" "key1" "val1"])))))
+           (read-string (client (req ["PUT" "b1"
+                                      (pr-str "key1") (pr-str "val1")])))))
     (is (= "val1"
-           (client (req ["GET" "b1" "key1"]))))
+           (read-string (client (req ["GET" "b1" (pr-str "key1")])))))
     (is (= nil
-           (read-string (client (req ["PUT" "b1" "key2" "val2"])))))
-    #_(is (= #{"key1" "key2"}
-             (-> (client (req ["KEYS" "b1"]))
-                 read-string
-                 set)))
-    #_(is (= '(["key2" "val2"] ["key1" "val1"])
+           (read-string (client (req ["PUT" "b1"
+                                      (pr-str "key2") (pr-str "val2")])))))
+    (is (= #{"key1" "key2"}
+           (set (read-string (client (req ["KEYS" "b1"]))))))
+    (is (= '(["key2" "val2"] ["key1" "val1"])
            (read-string (client (req ["SEQ" "b1"])))))
     (is (= "val1"
-           (client (req ["DELETE" "b1" "key1"]))))
+           (read-string (client (req ["DELETE" "b1" (pr-str "key1")])))))
     (is (= "val2"
-           (client (req ["DELETE" "b1" "key2"]))))))
+           (read-string (client (req ["DELETE" "b1" (pr-str "key2")])))))))
