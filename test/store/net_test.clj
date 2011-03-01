@@ -18,6 +18,10 @@
            (store/bucket-put b "k1" "v1")))
     (is (= "v1"
            (store/bucket-get b "k1")))
+    (is (= nil
+           (store/bucket-put b "k2" 5)))
+    (is (= 5
+           (store/bucket-get b "k2")))
 
     (close-server s)))
 
