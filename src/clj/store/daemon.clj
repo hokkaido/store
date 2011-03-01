@@ -1,6 +1,7 @@
 (ns store.daemon
   (:require [store.api :as store])
-  (:use [clojure.contrib.server-socket :only [create-server
+  (:use [plumbing.core :only [with-log]]
+        [clojure.contrib.server-socket :only [create-server
                                               close-server]]
         [clojure.string :only [lower-case]]
         [store.message :only [read-msg write-msg]])
@@ -31,12 +32,14 @@
 
 (defn handler [buckets]
   "Map of buckets."
-  (fn [^InputStream is ^OutputStream os]
-    (let [[op bname & args] (read-msg is)
-          op-key (-> op lower-case keyword)
-          b (buckets (-> bname keyword))
-          bop (op-map op-key)]
-      (write-msg os [(pr-str
-                      (apply bop b
-                             (map read-string args)))])
+  (let [exec-req (with-log :error
+		   (fn [[op bname & args]]
+		     (let [op-key (-> op lower-case keyword)
+			   b (buckets (-> bname keyword))
+			   bop (op-map op-key)]
+		       [(pr-str
+			 (apply bop b
+				(map read-string args)))])))]
+    (fn [^InputStream is ^OutputStream os]
+      (write-msg os (exec-req (read-msg is)))
       (.flush os))))
