@@ -7,6 +7,14 @@
 	    [clojure.string :as str]
 	    [clj-json.core :as json]))
 
+(defn decode-json-bodys [json-bodys]
+  (->> json-bodys
+       (map  (comp #(get % "keys") json/parse-string))
+       (remove empty?)
+       flat-iter
+       iterator-seq
+       (map ring/url-decode)))
+
 (defn riak-bucket [& {:keys [server,name,port,prefix,bucket-config]
                       :or {server "http://127.0.0.1"
                            prefix "riak"
@@ -27,18 +35,11 @@
             (default-bucket-seq this))
            (bucket-keys
             [this]
-	    (iterator-seq
-	     (flat-iter
-	      (map
-	       (fn [json-str]
-		 (map ring/url-decode
-		      (-> json-str
-			  json/parse-string
-			  (get "keys"))))   
-	       (-> (mk-path)
-		   (client/get {:query-params {"keys" "stream"}
-				:chunked? true})
-		   :body)))))
+	    (-> (mk-path)
+		(client/get {:query-params {"keys" "stream"}
+			     :chunked? true})
+		:body
+		decode-json-bodys))
            (bucket-exists?
             [this k]
             (default-bucket-exists? this k))
