@@ -41,18 +41,21 @@
                             :checkpoint-high-priority? true
                             :num-cleaner-threads 3
                             :locking true)
-        b (bdb/bdb-bucket
-           (bdb/bdb-db "b1" db-env
-                       :cache-mode :evict-ln))
         s (start
            (partial server (bucket-server
-                            {:b1 b})
+                            {:b1 (bdb/bdb-bucket
+                                  (bdb/bdb-db "b1" db-env
+                                              :cache-mode :evict-ln))})
                     read-msg write-msg)
-           :port 4444)]
+           :port 4445)
+        b (net-bucket :name "b1"
+                      :host "127.0.0.1"
+                      :port 4445)]
     (is (nil?
          (store/bucket-get b "k1")))
-    (is (nil?
-         (store/bucket-put b "k1" {:foo 0.99})))
+
+    (store/bucket-put b "k1" {:foo 0.99})
+
     (is (= {:foo 0.99}
            (store/bucket-get b "k1")))
 
