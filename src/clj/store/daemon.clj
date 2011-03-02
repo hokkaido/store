@@ -24,9 +24,9 @@
    :keys store/bucket-keys
    :seq store/bucket-seq
    :modified store/bucket-modified
+   :merge store/bucket-merge
    :put store/bucket-put
    :delete store/bucket-delete
-   :update store/bucket-update
    :sync store/bucket-sync
    :close store/bucket-close})
 
@@ -39,5 +39,6 @@
 			   bop (op-map op-key)]
 		       [(apply bop b args)])))]
     (fn [^InputStream is ^OutputStream os]
-      (write-msg os (exec-req (read-msg is)))
-      (.flush os))))
+      (let [i (read-msg is)]
+	(write-msg os (exec-req i))
+	(.flush os)))))
