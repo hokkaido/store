@@ -38,4 +38,6 @@
       (bucket-sync [this]
                    (client ["SYNC" name]))
       (bucket-close [this]
-                    (client ["CLOSE" name])))))
+                    (client ["CLOSE" name]))
+      (bucket-merge [this k v]
+		    (client ["MERGE" name k v])))))
