@@ -2,7 +2,8 @@
   (:use store.api
         [clojure.java.io :only [file copy]]
         [clojure.contrib.shell :only [sh]]
-        [plumbing.serialize :only [write-msg read-msg client-socket req]]
+        [plumbing.serialize :only [write-msg read-msg]]
+        [plumbing.server :only [client]]
         [plumbing.core :only [with-timeout]])
   (:import (java.net Socket InetAddress)))
 
@@ -15,26 +16,26 @@
       :or {timeout 10}}]
   ;; Client will later use a pool
   (let [client (with-timeout timeout
-                 (partial client-socket host port))]
+                 (partial client host port (comp first read-msg) write-msg))]
     (reify
       IReadBucket
       (bucket-get [this k]
-                  (client (req ["GET" name k])))
+                  (client ["GET" name k]))
       (bucket-keys [this]
-                   (client (req ["KEYS" name])))
+                   (client ["KEYS" name]))
       (bucket-seq [this]
-                  (client (req ["SEQ" name])))
+                  (client ["SEQ" name]))
       (bucket-exists? [this k]
-                      (client (req ["EXISTS" name k])))
+                      (client ["EXISTS" name k]))
 
       IWriteBucket
       (bucket-put [this k v]
-                  (client (req ["PUT" name k v])))
+                  (client ["PUT" name k v]))
       (bucket-delete [this k]
-                     (client (req ["DELETE" name k])))
+                     (client ["DELETE" name k]))
       (bucket-update [this k f]
-                     (client (req ["UPDATE" name k])))
+                     (client ["UPDATE" name k]))
       (bucket-sync [this]
-                   (client (req ["SYNC" name])))
+                   (client ["SYNC" name]))
       (bucket-close [this]
-                    (client (req ["CLOSE" name]))))))
+                    (client ["CLOSE" name])))))

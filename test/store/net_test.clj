@@ -1,6 +1,7 @@
 (ns store.net-test
   (:use clojure.test
-	[plumbing.serialize :only [start handler]]
+	[plumbing.server :only [start server]]
+	[plumbing.serialize :only [read-msg write-msg]]
 	[clojure.contrib.server-socket :only [close-server]]
 	store.net
 	store.daemon)
@@ -8,8 +9,9 @@
 
 (deftest  get-put-test
   (let [s (start
-           (handler (bucket-server
-		     {:b1 (store/hashmap-bucket)}))
+           (partial server (bucket-server
+			    {:b1 (store/hashmap-bucket)})
+		    read-msg write-msg)
            :port 4444)
         b (net-bucket :name "b1"
                       :host "127.0.0.1"
