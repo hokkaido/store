@@ -1,14 +1,18 @@
 (ns store.net-test
   (:use clojure.test
-        [store.daemon :only [start handler]]
+        [plumbing.server :only [start server]]
+        [plumbing.serialize :only [read-msg write-msg]]
         [clojure.contrib.server-socket :only [close-server]]
-        store.net)
+        store.net
+        store.daemon)
   (:require [store.api :as store]
             [store.bdb :as bdb]))
 
 (deftest get-put-test
   (let [s (start
-           (handler {:b1 (store/hashmap-bucket)})
+           (partial server (bucket-server
+                            {:b1 (store/hashmap-bucket)})
+                    read-msg write-msg)
            :port 4444)
         b (net-bucket :name "b1"
                       :host "127.0.0.1"
@@ -41,7 +45,9 @@
            (bdb/bdb-db "b1" db-env
                        :cache-mode :evict-ln))
         s (start
-           (handler {:b1 b})
+           (partial server (bucket-server
+                            {:b1 b})
+                    read-msg write-msg)
            :port 4444)]
     (is (nil?
          (store/bucket-get b "k1")))

@@ -20,11 +20,9 @@
     "write value for key. return value can be anything")
   (bucket-delete [this k] "remove key-value pair")
   (bucket-update [this k f])
+  (bucket-merge [this k v] "merge v into current value. optional")
   (bucket-sync [this])
   (bucket-close [this]))
-
-(defprotocol IMergableBucket
-  (bucket-merge [this k v] "merge v into current value. optional"))
 
 ;;; Default Bucket Operations
 
@@ -46,6 +44,9 @@
 (defn default-bucket-keys [b]
   (map first (bucket-seq b)))
 
+(defn default-bucket-merge [b merge-fn k v]
+  (bucket-update b k (fn [v-to] (merge-fn v-to v))))
+
 ;;; Generic Buckets
 
 (defn copy-bucket [src dst]
@@ -57,16 +58,30 @@
    b k
    (fnil inc 0)))
 
-(defn as-mergable [b merge-fn]
-  (reify IMergableBucket
+(defn with-merge [b merge-fn]
+  (reify
+           
+     IWriteBucket
      (bucket-merge [this k v]
-       (bucket-update b k (fn [cur-val] (merge-fn k cur-val v))))))
+       (default-bucket-merge b (partial merge-fn k) k v))
+     (bucket-put [this k v] (bucket-put b k v))
+     (bucket-delete [this k] (bucket-delete b k))
+     (bucket-update [this k f] (bucket-update b k f))
+     (bucket-sync [this] (bucket-sync b))
+     (bucket-close [this] (bucket-close b))
+
+     IReadBucket
+     (bucket-get [this k] (bucket-get b k))
+     (bucket-exists? [this k] (bucket-exists? b k))
+     (bucket-keys [this] (bucket-keys b))
+     (bucket-seq [this] (bucket-seq b))
+     (bucket-modified [this k] (bucket-modified b k))))
 
 (defn bucket-merge-to!
   "merge takes (k to-value from-value)"
   [from to]
-  {:pre [(satisfies? IMergableBucket to)
-	 (or (map? from) (satisfies? IReadBucket from))]}
+  {:pre [(or (map? from) (satisfies? IReadBucket from))
+	 (and (satisfies? IWriteBucket to))]}	 
   (doseq [[k v] (if (map? from) from
 		    (bucket-seq from))]
     (bucket-merge to k v))
@@ -159,27 +174,13 @@
 	    res)))
       :exists? bucket-exists?})
 
-(def read-keys
-     #{:get
-       :seq
-       :bucket
-       :keys
-       :get-ensure
-       :exists?})
-
 (def write-ops
      {:put bucket-put
       :delete bucket-delete
+      :merge bucket-merge
       :update bucket-update
       :sync bucket-sync
       :close bucket-close})
-
-(def write-keys
-     #{:put
-       :delete
-       :update
-       :sync
-       :close})
 
 (defn bucket-op [ops get-bucket]
   (fn [op bucket-name & args]
@@ -203,6 +204,7 @@
      (s :keys \"bucket\") returns seq of keys for bucket
      (s :bucket \"bucket\") returns bucket impl
      (s :get-ensure \"bucket\" \"key\" get-fn)
+     (s :merge \"bucket\" \"key\" \"partial-val\")
   The first 6  ops correspond to bucket-{get,seq,get,exists?,delete,keys} respectively
   on the specific bucket"    
   ([bucket-map]
@@ -214,7 +216,7 @@
      (bucket-op
       (merge read-ops write-ops)
       (fn [bucket op]
-	(if (contains? read-keys op)
+	(if (find read-ops op)
 	  (reads bucket)
 	  (writes bucket))))))
 
