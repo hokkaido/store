@@ -1,18 +1,20 @@
 (ns store.daemon-test
   (:use clojure.test
         [store.api :only [hashmap-bucket bucket-put]]
-        [store.net :only [client-socket req]]
+        [plumbing.serialize :only [client-socket req]]
         [clojure.contrib.server-socket :only [close-server]])
-  (:use store.daemon)
+  (:use store.daemon
+	plumbing.serialize)
   (:import (java.net InetAddress)
            (java.io ByteArrayOutputStream)
            (org.apache.commons.io IOUtils)))
 
 (deftest handler-test
   (let [baos (ByteArrayOutputStream.)]
-    ((handler {:b1 (doto (hashmap-bucket)
-                     (bucket-put "k1" "val1"))
-               :b2 (hashmap-bucket)})
+    ((handler (bucket-server
+	       {:b1 (doto (hashmap-bucket)
+		      (bucket-put "k1" "val1"))
+		:b2 (hashmap-bucket)}))
      (IOUtils/toInputStream
       "*3\r\n$3\r\nGET\r\n$2\r\nb1\r\n$4\r\n\"k1\"\r\n")
      baos)
@@ -23,8 +25,9 @@
 
 (deftest server-client-test
   (let [s (start
-           (handler {:b1 (hashmap-bucket)
-                     :b2 (hashmap-bucket)})
+           (handler (bucket-server
+		     {:b1 (hashmap-bucket)
+				    :b2 (hashmap-bucket)}))
            :port 4444)]
 
     (is (= nil

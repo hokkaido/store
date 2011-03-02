@@ -1,13 +1,15 @@
 (ns store.net-test
   (:use clojure.test
-	[store.daemon :only [start handler]]
+	[plumbing.serialize :only [start handler]]
 	[clojure.contrib.server-socket :only [close-server]]
-	store.net)
+	store.net
+	store.daemon)
   (:require [store.api :as store]))
 
 (deftest  get-put-test
   (let [s (start
-           (handler {:b1 (store/hashmap-bucket)})
+           (handler (bucket-server
+		     {:b1 (store/hashmap-bucket)}))
            :port 4444)
         b (net-bucket :name "b1"
                       :host "127.0.0.1"

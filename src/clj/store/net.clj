@@ -2,22 +2,9 @@
   (:use store.api
         [clojure.java.io :only [file copy]]
         [clojure.contrib.shell :only [sh]]
-        [store.message :only [write-msg read-msg]]
+        [plumbing.serialize :only [write-msg read-msg client-socket req]]
         [plumbing.core :only [with-timeout]])
   (:import (java.net Socket InetAddress)))
-
-(defn client-socket [^String host ^Integer port f]
-  (let [client (Socket. (InetAddress/getByName host) port)
-        os (.getOutputStream client)
-        ins (.getInputStream client)]
-    (f ins os)))
-
-(defn req [cmd]
-  (fn [^InputStream ins
-       ^OutputStream os]
-    (write-msg os cmd)
-    (-> (read-msg ins)
-        first)))
 
 (defn net-bucket
   "Provides bucket impl for a network interface to a store."
