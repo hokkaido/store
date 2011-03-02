@@ -58,9 +58,24 @@
    (fnil inc 0)))
 
 (defn as-mergable [b merge-fn]
-  (reify IMergableBucket
+  (reify
+     IMergableBucket
      (bucket-merge [this k v]
-       (bucket-update b k (fn [cur-val] (merge-fn k cur-val v))))))
+       (bucket-update b k (fn [cur-val] (merge-fn k cur-val v))))
+   
+     IReadBucket
+     (bucket-get [this k] (bucket-get b k))
+     (bucket-exists? [this k] (bucket-exists? b k))
+     (bucket-keys [this] (bucket-keys b))
+     (bucket-seq [this] (bucket-seq b))
+     (bucket-modified [this k] (bucket-modified b k))
+
+     IWriteBucket
+     (bucket-put [this k v] (bucket-put b k v))
+     (bucket-delete [this k] (bucket-delete b k))
+     (bucket-update [this k f] (bucket-update b k f))
+     (bucket-sync [this] (bucket-sync b))
+     (bucket-close [this] (bucket-close b))))
 
 (defn bucket-merge-to!
   "merge takes (k to-value from-value)"
