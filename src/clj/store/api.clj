@@ -46,6 +46,9 @@
 (defn default-bucket-keys [b]
   (map first (bucket-seq b)))
 
+(defn default-bucket-merge [b merge-fn k v]
+  (bucket-update b k (fn [v-to] (merge-fn v-to v))))
+
 ;;; Generic Buckets
 
 (defn copy-bucket [src dst]
@@ -61,7 +64,7 @@
   (reify
      IMergableBucket
      (bucket-merge [this k v]
-       (bucket-update b k (fn [cur-val] (merge-fn k cur-val v))))
+       (default-bucket-merge b (partial merge-fn k) k v))
    
      IReadBucket
      (bucket-get [this k] (bucket-get b k))

@@ -106,7 +106,7 @@
         b2 (hashmap-bucket)]
     (bucket-put b1 :foo {:bar "bar"})
     (bucket-put b1 :nutty {:mcsackhang "mcsackhang"})
-    (bucket-merge-to! b1 (as-mergable b2 (fn [k v1 v2] (merge v1 v2))))
+    (bucket-merge-to! b1 (as-mergable b2 (fn [_ v1 v2] (merge v1 v2))))
     (is (= (into {} (bucket-seq b2))
 	   (into {} (bucket-seq b1))))
     (bucket-merge-to! {:bar {:balls "deep"}}
