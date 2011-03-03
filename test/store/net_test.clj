@@ -1,7 +1,7 @@
 (ns store.net-test
   (:use clojure.test
         [plumbing.server :only [start server]]
-        [plumbing.serialize :only [read-msg write-msg]]
+        [plumbing.serialize :only [read-msg write-msg pr-java]]
         [clojure.contrib.server-socket :only [close-server]]
         store.net
         store.daemon)
@@ -45,7 +45,7 @@
            (partial server (bucket-server
                             {:b1 (bdb/bdb-bucket
                                   (bdb/bdb-db "b1" db-env
-                                              :cache-mode :evict-ln))})
+                                              :cache-mbode :evict-ln))})
                     read-msg write-msg)
            :port 4445)
         b (net-bucket :name "b1"
