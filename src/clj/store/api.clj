@@ -20,9 +20,11 @@
     "write value for key. return value can be anything")
   (bucket-delete [this k] "remove key-value pair")
   (bucket-update [this k f])
-  (bucket-merge [this k v] "merge v into current value. optional")
   (bucket-sync [this])
-  (bucket-close [this]))
+  (bucket-close [this])
+  ;; optional merging functins
+  (bucket-merge [this k v] "merge v into current value")
+  (bucket-merger [this] "return the fn used to merge. should be 3 args of [k cur-val new-val]"))
 
 ;;; Default Bucket Operations
 
@@ -62,13 +64,14 @@
   (reify
            
      IWriteBucket
-     (bucket-merge [this k v]
-       (default-bucket-merge b (partial merge-fn k) k v))
      (bucket-put [this k v] (bucket-put b k v))
      (bucket-delete [this k] (bucket-delete b k))
      (bucket-update [this k f] (bucket-update b k f))
      (bucket-sync [this] (bucket-sync b))
      (bucket-close [this] (bucket-close b))
+     (bucket-merge [this k v]
+       (default-bucket-merge b (partial merge-fn k) k v))
+     (bucket-merger [this] merge-fn)
 
      IReadBucket
      (bucket-get [this k] (bucket-get b k))
