@@ -2,10 +2,31 @@
   (:use store.api
         [clojure.java.io :only [file copy]]
         [clojure.contrib.shell :only [sh]]
-        [plumbing.serialize :only [write-msg read-msg]]
+        [plumbing.serialize :only [reader writer read-str-msg write-str-msg]]
         [plumbing.server :only [client]]
-        [plumbing.core :only [with-timeout]])
+        [plumbing.core :only [with-timeout with-log]]
+	[clojure.string :only [lower-case]])
   (:import (java.net Socket InetAddress)))
+
+(def op-map
+  {:get bucket-get
+   :exists bucket-exists?
+   :keys bucket-keys
+   :seq bucket-seq
+   :modified bucket-modified
+   :merge bucket-merge
+   :put bucket-put
+   :delete bucket-delete
+   :sync bucket-sync
+   :close bucket-close})
+
+(defn bucket-server [buckets]
+  (with-log :error
+    (fn [[op bname & args]]
+      (let [op-key (-> op lower-case keyword)
+	    b (buckets (-> bname keyword))
+	    bop (op-map op-key)]
+	[(apply bop b args)]))))
 
 (defn net-bucket
   "Provides bucket impl for a network interface to a store."
@@ -16,7 +37,10 @@
       :or {timeout 10}}]
   ;; Client will later use a pool
   (let [client (with-timeout timeout
-                 (partial client host port (comp first read-msg) write-msg))]
+                 (partial client host port
+			  (comp first read-str-msg reader)
+			  (fn [s msg]
+			    (write-str-msg (writer s) msg))))]
     (reify
       IReadBucket
       (bucket-get [this k]
