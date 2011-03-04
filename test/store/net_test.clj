@@ -25,21 +25,13 @@
 ;;     (is (= "*1\r\n$6\r\n\"val1\"\r\n"
 ;;            (String. (.toByteArray baos))))))
 
-(def test-client (partial client "127.0.0.1" 4444
-			  (comp first read-str-msg reader)
-			  (fn [s msg]
-			    (write-str-msg (writer s) msg))))
+(def test-client (net-bucket-client "127.0.0.1" 4444))
 
 (deftest server-client-test
-  (let [s (start
-           (partial server (bucket-server
-		    {:b1 (hashmap-bucket)
-		     :b2 (hashmap-bucket)})
-		    (comp read-str-msg reader)
-		    (fn [s msg]
-		      (write-str-msg (writer s) msg)))
-           :port 4444)]
-
+  (let [s (start-net-bucket-server
+	     {:b1 (hashmap-bucket)
+	      :b2 (hashmap-bucket)}
+	     4444)]
     (is (= nil
            (test-client ["PUT" "b1"
 			       "key1" "val1"])))
@@ -61,14 +53,17 @@
     (is (= "v" (test-client ["GET" "b1" "http://aria42.com"])))
     (close-server s)))
 
+(deftest mk-client-exec-test
+  (let [b (store/hashmap-bucket)
+	s (start-net-bucket-server  {:b1 b} 4444)
+	[exec pool] (mk-client-exec test-client 5 #(.get %))]
+    (exec ["PUT" "b1" "K" "V"])
+    (is (= "V" (exec ["GET" "b1"  "K"])))
+    (close-server s)
+    (.shutdown pool)))
+
 (deftest get-put-test
-  (let [s (start
-           (partial server (bucket-server
-                            {:b1 (store/hashmap-bucket)})
-                    (comp read-str-msg reader)
-		    (fn [s msg]
-		       (write-str-msg (writer s) msg)))
-           :port 4444)
+  (let [s (start-net-bucket-server  {:b1 (store/hashmap-bucket)} 4444)
         b (net-bucket :name "b1"
                       :host "127.0.0.1"
                       :port 4444)]
@@ -96,24 +91,18 @@
                             :checkpoint-high-priority? true
                             :num-cleaner-threads 3
                             :locking true)
-        s (start
-           (partial server
-		    (bucket-server
-		     {:b1 (bdb/bdb-bucket
+        s (start-net-bucket-server
+	     {:b1 (bdb/bdb-bucket
 			   (bdb/bdb-db "b1" db-env
-				       :cache-mode :evict-ln))})
-                    (comp read-str-msg reader)
-		    (fn [s msg]
-		      (write-str-msg (writer s) msg)))
-           :port 4445)
+				       :cache-mode :evict-ln))}
+	     4444)
         b (net-bucket :name "b1"
                       :host "127.0.0.1"
-                      :port 4445)]
+                      :port 4444)]
     (is (nil?
          (store/bucket-get b "k1")))
 
     (store/bucket-put b "k1" {:foo 0.99})
-
     (is (= {:foo 0.99}
            (store/bucket-get b "k1")))
 

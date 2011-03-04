@@ -61,8 +61,7 @@
    (fnil inc 0)))
 
 (defn with-merge [b merge-fn]
-  (reify
-           
+  (reify           
      IWriteBucket
      (bucket-put [this k v] (bucket-put b k v))
      (bucket-delete [this k] (bucket-delete b k))
