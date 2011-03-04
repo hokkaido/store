@@ -34,8 +34,7 @@
   (start
    (with-log :error
      (partial server (bucket-server
-		      {:b1 (hashmap-bucket)
-		      :b2 (hashmap-bucket)})
+		      buckets)
 	     (comp read-str-msg reader)
 	     (fn [s msg]
 	       (write-str-msg (writer s) msg))))
