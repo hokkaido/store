@@ -11,7 +11,6 @@
                  [ring/ring-core "0.3.1"]
                  [clomert "0.2.0"]
                  [com.sleepycat/je "4.1.7"]
-                 [clj-serializer "0.1.0"]
                  [commons-io "2.0.1"]]
   :dev-dependencies [[swank-clojure "1.3.0-SNAPSHOT"]
                      [robert/hooke "1.1.0"]]
