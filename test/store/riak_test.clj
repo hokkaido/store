@@ -2,6 +2,8 @@
   (:use clj-json.core
         clojure.test
         store.riak
+        store.api
+        
         [clj-time.coerce :only [to-date]]
         [clj-time.core :only [date-time now]]))
 
@@ -18,7 +20,7 @@
          (parse-rfc2822 "Thu, 03 Mar 2011 05:55:57 GMT"))))
 
 ;; TODO: setup a bucket
-(deftest ^{:system true} bucket-modified-test
+#_(deftest ^{:system true} bucket-modified-test
   (is (nil? (bucket-modified b
                              "this-key-doesnt-exist")))
   (is (before? (now)
