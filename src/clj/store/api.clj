@@ -167,9 +167,9 @@
   "takes a bucket that has with-merge and returns an in-memory bucket which will use bucket-merge to merge values using the flush-merge-fn and when bucket-sync is called on return bucket
   will flush memory bucket into underlying bucket using underyling bucket merge fn"
   ([bucket flush-merge-fn]
-     (let [get-bucket #(with-merge bucket flush-merge-fn)
+     (let [get-bucket #(with-merge (hashmap-bucket) flush-merge-fn)
 	   mem-bucket (java.util.concurrent.atomic.AtomicReference. (get-bucket))
-	   do-flush! #(let [cur (.getAndSet mem-bucket (hashmap-bucket))]
+	   do-flush! #(let [cur (.getAndSet mem-bucket (get-bucket))]
 			(bucket-merge-to! cur bucket))]
        (reify
 	store.api.IWriteBucket
