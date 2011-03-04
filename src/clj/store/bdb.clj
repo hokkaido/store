@@ -174,5 +174,7 @@
                         (bdb-delete db k))
          (bucket-update [this k f]
                         (default-bucket-update this k f))
-         (bucket-sync [this] (.sync db))
+         (bucket-sync [this]
+		      (when (-> db .getConfig .getDeferredWrite)
+			(.sync db)))
          (bucket-close [this] (.close db))))

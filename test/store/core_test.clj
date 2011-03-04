@@ -115,4 +115,13 @@
     (is (= {:bar {:balls "deep"}
 	    :foo {:bar "bar"}
 	    :nutty {:mcsackhang "mcsackhang"}}
-	 (into {} (bucket-seq b2))))))
+	   (into {} (bucket-seq b2))))))
+
+(deftest with-flush-test
+  (let [b1 (with-merge (hashmap-bucket) (fnil (fn [_ v1 v2] (merge v1 v2)) {}))
+	b2 (with-flush b1)]
+    (bucket-merge b2 "k" {"v1" "v"})
+    (is (nil? (bucket-get b1 "k")))
+    (bucket-sync b2)
+    (is (= (bucket-get b1 "k") {"v1" "v"}))
+    (is (= (bucket-get b2 "k") {"v1" "v"}))))
