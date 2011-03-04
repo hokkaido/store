@@ -49,46 +49,6 @@
 (defn default-bucket-merge [b merge-fn k v]
   (bucket-update b k (fn [v-to] (merge-fn v-to v))))
 
-;;; Generic Buckets
-
-(defn copy-bucket [src dst]
-  (doseq [k (bucket-keys src)]
-    (bucket-put dst k (bucket-get src k))))
-
-(defn bucket-inc [b k]
-  (bucket-update
-   b k
-   (fnil inc 0)))
-
-(defn with-merge [b merge-fn]
-  (reify           
-     IWriteBucket
-     (bucket-put [this k v] (bucket-put b k v))
-     (bucket-delete [this k] (bucket-delete b k))
-     (bucket-update [this k f] (bucket-update b k f))
-     (bucket-sync [this] (bucket-sync b))
-     (bucket-close [this] (bucket-close b))
-     (bucket-merge [this k v]
-       (default-bucket-merge b (partial merge-fn k) k v))
-     (bucket-merger [this] merge-fn)
-
-     IReadBucket
-     (bucket-get [this k] (bucket-get b k))
-     (bucket-exists? [this k] (bucket-exists? b k))
-     (bucket-keys [this] (bucket-keys b))
-     (bucket-seq [this] (bucket-seq b))
-     (bucket-modified [this k] (bucket-modified b k))))
-
-(defn bucket-merge-to!
-  "merge takes (k to-value from-value)"
-  [from to]
-  {:pre [(or (map? from) (satisfies? IReadBucket from))
-	 (and (satisfies? IWriteBucket to))]}	 
-  (doseq [[k v] (if (map? from) from
-		    (bucket-seq from))]
-    (bucket-merge to k v))
-  to)
-
 ;;; Simple Buckets
 
 (defn fs-bucket [^String dir-path]
@@ -161,6 +121,72 @@
 		      (recur)))))
             (bucket-sync [this] nil)
             (bucket-close [this] nil))))
+
+
+;;; Generic Buckets
+
+(defn copy-bucket [src dst]
+  (doseq [k (bucket-keys src)]
+    (bucket-put dst k (bucket-get src k))))
+
+(defn bucket-inc [b k]
+  (bucket-update
+   b k
+   (fnil inc 0)))
+
+(defn with-merge [b merge-fn]
+  (reify           
+     IWriteBucket
+     (bucket-put [this k v] (bucket-put b k v))
+     (bucket-delete [this k] (bucket-delete b k))
+     (bucket-update [this k f] (bucket-update b k f))
+     (bucket-sync [this] (bucket-sync b))
+     (bucket-close [this] (bucket-close b))
+     (bucket-merge [this k v]
+       (default-bucket-merge b (partial merge-fn k) k v))
+     (bucket-merger [this] merge-fn)
+
+     IReadBucket
+     (bucket-get [this k] (bucket-get b k))
+     (bucket-exists? [this k] (bucket-exists? b k))
+     (bucket-keys [this] (bucket-keys b))
+     (bucket-seq [this] (bucket-seq b))
+     (bucket-modified [this k] (bucket-modified b k))))
+
+(defn bucket-merge-to!
+  "merge takes (k to-value from-value)"
+  [from to]
+  {:pre [(or (map? from) (satisfies? IReadBucket from))
+	 (and (satisfies? IWriteBucket to))]}	 
+  (doseq [[k v] (if (map? from) from
+		    (bucket-seq from))]
+    (bucket-merge to k v))
+  to)
+
+(defn with-flush
+  "takes a bucket that has with-merge and returns an in-memory bucket which will use bucket-merge to merge values using the flush-merge-fn and when bucket-sync is called on return bucket
+  will flush memory bucket into underlying bucket using underyling bucket merge fn"
+  ([bucket flush-merge-fn]
+     (let [get-bucket #(with-merge b flush-merge-fn)
+	   mem-bucket (java.util.concurrent.atomic.AtomicReference. (get-bucket))
+	   do-flush! #(let [cur (.getAndSet mem-bucket (hashmap-bucket))]
+			(bucket-merge-to! cur bucket))]
+       (reify
+	store.api.IWriteBucket
+	(bucket-merge [this k v] (bucket-merge (.get mem-bucket) k v))		      
+	(bucket-sync [this]
+	  (do-flush!)
+	  (bucket-sync bucket))
+	(bucket-close [this]
+	  (do-flush!)
+	  (bucket-close bucket))		 
+
+	store.api.IReadBucket
+	(bucket-get [this k] (bucket-get bucket k))
+	(bucket-seq [this] (bucket-seq bucket))
+	(bucket-keys [this] (bucket-keys bucket)))))
+  
+  ([b] (with-flush b (bucket-merger b))))
 
 (def read-ops
      {:get bucket-get
