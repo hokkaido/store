@@ -38,7 +38,8 @@
 		      :b2 (hashmap-bucket)})
 	     (comp read-str-msg reader)
 	     (fn [s msg]
-	       (write-str-msg (writer s) msg))))))
+	       (write-str-msg (writer s) msg))))
+   :port port))
 
 (defn net-bucket-client [host port]
      (partial client host port

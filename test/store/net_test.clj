@@ -95,10 +95,10 @@
 	     {:b1 (bdb/bdb-bucket
 			   (bdb/bdb-db "b1" db-env
 				       :cache-mode :evict-ln))}
-	     4444)
+	     4445)
         b (net-bucket :name "b1"
                       :host "127.0.0.1"
-                      :port 4444)]
+                      :port 4445)]
     (is (nil?
          (store/bucket-get b "k1")))
 
