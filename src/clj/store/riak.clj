@@ -25,6 +25,13 @@
   (time-coerce/from-date
    (.parse rfc2822-formatter d)))
 
+(defn last-modified [resp]
+  (if-let [d (-> resp
+                 :headers
+                 (get "last-modified"))]
+    (parse-rfc2822 d)
+    nil))
+
 (defn riak-bucket [& {:keys [server,name,port,prefix,bucket-config]
                       :or {server "http://127.0.0.1"
                            prefix "riak"
@@ -39,8 +46,15 @@
       store.api.IReadBucket
       (bucket-get
        [this k]
-       (-log> k str ring/url-encode mk-path client/get
-              :body (json/parse-string)))
+       (let [resp (-log> (str k)
+                         ring/url-encode
+                         mk-path
+                         client/get)]
+         (if-let [v (-log> resp :body
+                           (json/parse-string))]
+           (with-meta v
+             {:last-modified (last-modified resp)})
+           nil)))
       (bucket-seq
        [this]
        (default-bucket-seq this))
@@ -56,14 +70,11 @@
        (default-bucket-exists? this k))
       (bucket-modified
        [this k]
-       (if-let [^String d (-> (str k)
-                              ring/url-encode
-                              mk-path
-                              client/get
-                              :headers
-                              (get "last-modified"))]
-         (parse-rfc2822 d)
-         nil))
+       (-> (str k)
+           ring/url-encode
+           mk-path
+           client/get
+           last-modified))
 
       store.api.IWriteBucket
       (bucket-put
