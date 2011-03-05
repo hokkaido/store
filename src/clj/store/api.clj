@@ -1,9 +1,9 @@
 (ns store.api
   (:use    plumbing.core)
   (:require 
-            [ring.util.codec :as ring]
-            [clojure.string :as str]
-            [clj-json.core :as json])
+   [ring.util.codec :as ring]
+   [clojure.string :as str]
+   [clj-json.core :as json])
   (:import [java.util.concurrent ConcurrentHashMap]))
 
 (set! *warn-on-reflection* false)
@@ -17,7 +17,7 @@
 
 (defprotocol IWriteBucket
   (bucket-put [this k v]
-    "write value for key. return value can be anything")
+	      "write value for key. return value can be anything")
   (bucket-delete [this k] "remove key-value pair")
   (bucket-update [this k f])
   (bucket-sync [this])
@@ -99,7 +99,7 @@
 			(.get h k))
             (bucket-seq [this]
 			(for [^java.util.Map$Entry e
-				     (.entrySet h)]
+			      (.entrySet h)]
 			  [(.getKey e) (.getValue e)]))
 
 	    (bucket-exists? [this k]
@@ -111,14 +111,14 @@
             (bucket-delete [this k]
                            (.remove h k))
             (bucket-update [this k f]
-		(loop []
-		  (let [v (.get h k) new-v (f v)			
-			replaced? (cond
-				    (nil? v) (nil? (.putIfAbsent h k new-v))
-				    (nil? new-v) (or (nil? v) (.remove h k v))
-				    :else (.replace h k v new-v))]
-		    (when (not replaced?)
-		      (recur)))))
+			   (loop []
+			     (let [v (.get h k) new-v (f v)			
+				   replaced? (cond
+					      (nil? v) (nil? (.putIfAbsent h k new-v))
+					      (nil? new-v) (or (nil? v) (.remove h k v))
+					      :else (.replace h k v new-v))]
+			       (when (not replaced?)
+				 (recur)))))
             (bucket-sync [this] nil)
             (bucket-close [this] nil))))
 
@@ -136,22 +136,22 @@
 
 (defn with-merge [b merge-fn]
   (reify           
-     IWriteBucket
-     (bucket-put [this k v] (bucket-put b k v))
-     (bucket-delete [this k] (bucket-delete b k))
-     (bucket-update [this k f] (bucket-update b k f))
-     (bucket-sync [this] (bucket-sync b))
-     (bucket-close [this] (bucket-close b))
-     (bucket-merge [this k v]
-       (default-bucket-merge b (partial merge-fn k) k v))
-     (bucket-merger [this] merge-fn)
+   IWriteBucket
+   (bucket-put [this k v] (bucket-put b k v))
+   (bucket-delete [this k] (bucket-delete b k))
+   (bucket-update [this k f] (bucket-update b k f))
+   (bucket-sync [this] (bucket-sync b))
+   (bucket-close [this] (bucket-close b))
+   (bucket-merge [this k v]
+		 (default-bucket-merge b (partial merge-fn k) k v))
+   (bucket-merger [this] merge-fn)
 
-     IReadBucket
-     (bucket-get [this k] (bucket-get b k))
-     (bucket-exists? [this k] (bucket-exists? b k))
-     (bucket-keys [this] (bucket-keys b))
-     (bucket-seq [this] (bucket-seq b))
-     (bucket-modified [this k] (bucket-modified b k))))
+   IReadBucket
+   (bucket-get [this k] (bucket-get b k))
+   (bucket-exists? [this k] (bucket-exists? b k))
+   (bucket-keys [this] (bucket-keys b))
+   (bucket-seq [this] (bucket-seq b))
+   (bucket-modified [this k] (bucket-modified b k))))
 
 (defn bucket-merge-to!
   "merge takes (k to-value from-value)"
@@ -173,18 +173,20 @@
 			(bucket-merge-to! cur bucket))]
        (reify
 	store.api.IWriteBucket
-	(bucket-merge [this k v] (bucket-merge (.get mem-bucket) k v))		      
-	(bucket-sync [this]
-	  (do-flush!)
-	  (bucket-sync bucket))
-	(bucket-close [this]
-	  (do-flush!)
-	  (bucket-close bucket))		 
+	(bucket-merge [this k v]
+		      (bucket-merge (.get mem-bucket) k v))		    (bucket-update [this k f]									   (bucket-update (.get mem-bucket) k f))
+		      
+		      (bucket-sync [this]
+				   (do-flush!)
+				   (bucket-sync bucket))
+		      (bucket-close [this]
+				    (do-flush!)
+				    (bucket-close bucket))		 
 
-	store.api.IReadBucket
-	(bucket-get [this k] (bucket-get bucket k))
-	(bucket-seq [this] (bucket-seq bucket))
-	(bucket-keys [this] (bucket-keys bucket)))))
+		      store.api.IReadBucket
+		      (bucket-get [this k] (bucket-get bucket k))
+		      (bucket-seq [this] (bucket-seq bucket))
+		      (bucket-keys [this] (bucket-keys bucket)))))
   
   ([b] (with-flush b (bucket-merger b))))
 
