@@ -202,7 +202,8 @@
 	  (let [res (default-fn)]
 	    (bucket-put bucket key res)
 	    res)))
-      :exists? bucket-exists?})
+      :exists? bucket-exists?
+      :modified bucket-modified})
 
 (def write-ops
      {:put bucket-put
