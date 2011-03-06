@@ -26,11 +26,10 @@
    (.parse rfc2822-formatter d)))
 
 (defn last-modified [resp]
-  (if-let [d (-> resp
+  (when-let [d (-> resp
                  :headers
                  (get "last-modified"))]
-    (parse-rfc2822 d)
-    nil))
+    (silent parse-rfc2822 d)))
 
 (defn riak-bucket [& {:keys [server,name,port,prefix,bucket-config]
                       :or {server "http://127.0.0.1"
