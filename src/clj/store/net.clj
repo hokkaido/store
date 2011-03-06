@@ -46,8 +46,9 @@
 	      (fn [s msg]
 		(write-str-msg (writer s) msg))))
 
+
 (defn mk-client-exec [c num-threads future-policy]
-  (let [pool (Executors/newSingleThreadExecutor)]
+  (let [pool (Executors/newFixedThreadPool num-threads)]
     [(with-log :error
 	(fn [args]
 	  (let [^Callable work #(c args)
@@ -70,13 +71,16 @@
 	   wait-on-write true}}]
   ;; Client will later use a pool
   (let [c (net-bucket-client host port)
-	[reader-exec _] (mk-client-exec c reader-threads
-				 (fn [^Future f]
-				   (.get f (int timeout) (TimeUnit/SECONDS))))
-	[writer-exec _] (mk-client-exec c writer-threads
-				 (fn [^Future f]
-				   (when wait-on-write
-				     (.get f (int timeout) (TimeUnit/SECONDS)))))]
+	reader-exec c
+	writer-exec c
+	;; [reader-exec _] (mk-client-exec c reader-threads
+	;; 			 (fn [^Future f]
+	;; 			   (.get f (int timeout) (TimeUnit/SECONDS))))
+	;; [writer-exec _] (mk-client-exec c writer-threads
+	;; 			 (fn [^Future f]
+	;; 			   (when wait-on-write
+	;; 			     (.get f (int timeout) (TimeUnit/SECONDS)))))
+	]
     (reify
       IReadBucket
       (bucket-get [this k] (reader-exec ["GET" name k]))                   

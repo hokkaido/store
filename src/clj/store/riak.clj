@@ -73,7 +73,7 @@
        (-> (str k)
            ring/url-encode
            mk-path
-           client/get
+           client/head
            last-modified))
 
       store.api.IWriteBucket
