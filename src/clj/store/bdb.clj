@@ -159,6 +159,8 @@
   (reify IReadBucket
          (bucket-get [this k]
                      (bdb-get db k))
+	 (bucket-batch-get [this ks]
+			   (default-bucket-batch-get this ks))
          
          (bucket-keys [this] (default-bucket-keys this))
          (bucket-seq [this]

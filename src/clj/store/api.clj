@@ -1,15 +1,14 @@
 (ns store.api
-  (:use    plumbing.core)
+  (:use plumbing.core)
   (:require 
    [ring.util.codec :as ring]
    [clojure.string :as str]
    [clj-json.core :as json])
   (:import [java.util.concurrent ConcurrentHashMap]))
 
-(set! *warn-on-reflection* false)
-
 (defprotocol IReadBucket
   (bucket-get [this k] "fetch value for key")
+  (bucket-batch-get [this ks] "values for many keys, return map with ks")
   (bucket-exists? [this k] "does key-value pair exists")
   (bucket-keys [this] "seq of existing keys")
   (bucket-seq [this] "seq of [k v] elems")
@@ -33,6 +32,9 @@
    (partial = k)
    (bucket-keys b)))
 
+(defn default-bucket-batch-get [b ks]
+  (into {} (for [k ks] [k (bucket-get b k)])))
+	 
 (defn default-bucket-update [b k f]
   (->>  k
         (bucket-get b)
@@ -59,6 +61,8 @@
            (bucket-get [this k]
                        (let [f (java.io.File. f ^String (ring/url-encode k))]
                          (when (.exists f) (-> f slurp read-string))))
+
+	   (bucket-batch-get [this ks] (default-bucket-batch-get this ks))
 
            (bucket-seq [this] (default-bucket-seq this))
 	   
@@ -97,6 +101,8 @@
 			 (enumeration-seq (.keys h)))
             (bucket-get [this k]
 			(.get h k))
+	    (bucket-batch-get [this ks] (default-bucket-batch-get this ks))
+	    
             (bucket-seq [this]
 			(for [^java.util.Map$Entry e
 			      (.entrySet h)]
@@ -148,6 +154,7 @@
 
    IReadBucket
    (bucket-get [this k] (bucket-get b k))
+   (bucket-batch-get [this k] (bucket-batch-get b k))
    (bucket-exists? [this k] (bucket-exists? b k))
    (bucket-keys [this] (bucket-keys b))
    (bucket-seq [this] (bucket-seq b))
@@ -185,6 +192,7 @@
 
 		      store.api.IReadBucket
 		      (bucket-get [this k] (bucket-get bucket k))
+		      (bucket-batch-get [this k] (bucket-batch-get bucket k))
 		      (bucket-seq [this] (bucket-seq bucket))
 		      (bucket-keys [this] (bucket-keys bucket)))))
   
@@ -192,6 +200,7 @@
 
 (def read-ops
      {:get bucket-get
+      :batch-get bucket-batch-get
       :seq bucket-seq
       :bucket (fn [bucket & args] bucket)
       :keys bucket-keys

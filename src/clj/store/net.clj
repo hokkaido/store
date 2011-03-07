@@ -7,9 +7,10 @@
         [plumbing.core :only [print-all with-timeout with-log keywordize-map]]
         [clojure.string :only [lower-case]]
         [ring.adapter.jetty :only [run-jetty]]
-        [compojure.core :only [GET PUT routes]]
-        [ring.util.codec :only [url-decode url-encode]])
-  (:require [clj-json.core :as json]
+        [compojure.core :only [GET POST PUT routes]]
+	[ring.util.codec :only [url-decode url-encode]])
+  (:require 	[clojure.string :as str]
+            [clj-json.core :as json]
             [clj-http.client :as client])
   (:import (java.net Socket InetAddress
                      ServerSocket SocketException)
@@ -77,51 +78,67 @@
          "127.0.0.1"))
 
 (defn rest-bucket-handler [buckets]
-  [(GET "/buckets/:name/:key" {p :params}
-	(println p)
-	(let [b (buckets (url-decode (p :name)))
-	      k (url-decode (p :key))]	    
-	  {:body (json/generate-string (bucket-get b k))
-	   :content-type "application/json"
-	   :status 200}))
-   (PUT "/buckets/:name/:key" {p :params body :body}
-	(let [k (url-decode (p :key))
-	      v (json/parse-string (IOUtils/toString body "UTF8"))
-	      b (buckets (url-decode (p :name)))]
-	  (try (bucket-put b k v)
-	       {:body  (json/generate-string {"status" "ok"})
-		:content-type "application/json"
-		:status 200}
-	       (catch Exception e
-		 {:body (json/generate-string {"error"
-					       ((print-all :ex :stack :args :fn)
-						e bucket-put [k v])})
-		  :status 500
-		  :content-type "application/json"}))))])
+  (let [mk-response (fn [status s]
+		      {:body (json/generate-string s)
+		       :headers {"Content-Type" "application/json; charset=UTF-8"}
+		       :status status})
+	exec-request (fn [p & args]
+		       (let [bucket (buckets (p :name))
+			     bucket-op ((merge read-ops write-ops) (keyword (p :op)))]
+			 (cond
+			  (nil? bucket) (mk-response 500 {:error (str "Don't recognize bucket " (p :name))})
+			  (nil? bucket-op) (mk-response 500 {:error (str "Don't recognize op " (p :op))})
+			  :else (try
+				  (mk-response 200 (apply bucket-op bucket args))
+				  (catch Exception e
+				    (.printStackTrace e)
+				    (mk-response 500 {:error (str e)}))))))]
+    [ ;; seq, keys, sync, close    
+     (GET "/store/:op/:name" {p :params} (exec-request p))
+     ;; batch-get
+     (POST "/store/:op/:name" {p :params b :body}
+	   (exec-request (keywordize-map p)
+			 (json/parse-string (IOUtils/toString ^java.io.InputStream b "UTF8"))))
+     ;; get, modified, exists
+     (GET "/store/:op/:name/:key"  {p :params} (exec-request p (url-decode (p :key))))
+     ;; put, merge
+     (POST "/store/:op/:name/:key" {p :params b :body}
+	   (exec-request (keywordize-map p)
+			 (url-decode (p :key))
+			 (json/parse-string (IOUtils/toString ^java.io.InputStream b "UTF8"))))]))
 
-(defn start-rest-bucket-server [buckets port]
-  (run-jetty (apply routes (rest-bucket-handler buckets)) {:port port :join false}))
+(defn start-rest-bucket-server [buckets & {:keys [port] :or {port 4445} :as jetty-opts}]
+  (run-jetty (apply routes (rest-bucket-handler buckets)) (merge {:port port :join? false} jetty-opts)))
 
-(defn rest-bucket [name host port & [keywordize-map?]]
-  (let [base (format "http://%s:%d/buckets/%s/" host port name)
-	keywordize (if keywordize-map? keywordize-map identity)]
-    (reify
+(defn rest-bucket [& {:keys [name,host,port,keywordize-map?]
+		      :or {host "localhost"
+			   port 4445
+			   keywordize-map? false}}]
+  (when (nil? name) (throw (RuntimeException. "Must specify rest-bucket name")))
+  (let [base (format "http://%s:%d/store/" host port name)
+	exec-request (fn [[op & as] & [body-arg]]
+		       (let [uri (str base (str/join "/" (concat [op name] as)))
+			     resp (if-not body-arg (client/get uri)				    
+				    (client/post uri
+						 {:body (.getBytes (json/generate-string body-arg) "UTF8")}))]
+			 (if (= (:status resp) 200) 
+			   (-> resp :body json/parse-string)
+			   (throw (RuntimeException. (format "Rest bucket server error: %s" (:body resp)))))))]    
+   (reify 
      store.api.IReadBucket
-     (bucket-get [this k]
-	  (let [resp (client/get (str base (url-encode k)))]
-	    (cond
-	      (= (:status resp) 200)
-	        (-> resp :body json/parse-string keywordize)
-	      :else
-	        (throw (RuntimeException. (str "server error: " (-> resp :body (get "error"))))))))
+     (bucket-get [this k] (exec-request ["get" (url-encode k)]))
+     (bucket-seq [this] (exec-request ["seq"]))
+     (bucket-exists? [this k] (exec-request ["exists?" (url-encode k)]))
+     (bucket-keys [this] (exec-request ["keys"]))
+     (bucket-batch-get [this ks] (exec-request ["batch-get"] ks))
+     (bucket-modified [this k] (exec-request ["modified" (url-encode k)]))
 
      store.api.IWriteBucket
-     (bucket-put [this k v]
-       (let [resp  (client/put (str base (url-encode k)) {:body (.getBytes (json/generate-string v) "UTF8")})]
-	 (cond
-	   (= (:status resp) 200) (:body resp)
-	   :else (throw (RuntimeException. (str "server error: " (-> resp :body (get "error")))))))))))
-
+     (bucket-put [this k v] (exec-request ["put" (url-encode k)] v))
+     (bucket-delete [this k] (exec-request ["delete" (url-encode k)]))
+     (bucket-merge [this k v] (exec-request ["merge" (url-encode k)] v))
+     (bucket-close [this] (exec-request ["close"]))
+     (bucket-sync [this] (exec-request ["sync"])))))
 
 (defn net-bucket-client [host port]
   (partial client host port
