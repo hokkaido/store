@@ -107,8 +107,8 @@
 			 (url-decode (p :key))
 			 (json/parse-string (IOUtils/toString ^java.io.InputStream b "UTF8"))))]))
 
-(defn start-rest-bucket-server [buckets & {:keys [port] :or {port 4445} :as jetty-opts}]
-  (run-jetty (apply routes (rest-bucket-handler buckets)) (merge {:port port :join? false} jetty-opts)))
+(defn start-rest-bucket-server [buckets & {:keys [port,join?] :or {port 4445 join? false} :as jetty-opts}]
+  (run-jetty (apply routes (rest-bucket-handler buckets)) jetty-opts))
 
 (defn rest-bucket [& {:keys [name,host,port,keywordize-map?]
 		      :or {host "localhost"
