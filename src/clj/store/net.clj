@@ -6,9 +6,11 @@
         [plumbing.server :only [client server start]]
         [plumbing.core :only [with-timeout with-log]]
 	[clojure.string :only [lower-case]])
-  (:import
-   (java.net Socket InetAddress)
-   (java.util.concurrent Executors Future Callable TimeUnit)))
+  (:import (java.net Socket InetAddress
+                     ServerSocket SocketException)
+           (java.io InputStreamReader BufferedReader
+                    PrintWriter OutputStream InputStream)
+           (java.util.concurrent Executors Future Callable TimeUnit)))
 
 (def op-map
   {:get bucket-get
@@ -22,29 +24,57 @@
    :sync bucket-sync
    :close bucket-close})
 
-(defn- bucket-server [buckets]
+;; (defn- old-bucket-server [buckets]
+;;   (with-log :error
+;;     (fn [[op bname & args]]
+;;       (let [op-key (-> op lower-case keyword)
+;;             b (buckets (-> bname keyword))
+;;             bop (op-map op-key)]
+;;         [(apply bop b args)]))))
+
+;; (defn old-start-net-bucket-server [buckets port]
+;;   (start
+;;    (with-log :error
+;;      (partial server (old-bucket-server
+;; 		      buckets)
+;;               (comp read-str-msg reader)
+;;               (fn [s msg]
+;;                 (write-str-msg (writer s) msg))))
+;;    :port port))
+
+(defn bucket-server [buckets]
   (with-log :error
-    (fn [[op bname & args]]
-      (let [op-key (-> op lower-case keyword)
-	    b (buckets (-> bname keyword))
-	    bop (op-map op-key)]
-	[(apply bop b args)]))))
+    (fn [^Socket s]
+      (let [^InputStream in (.getInputStream s)
+            ^OutputStream out (.getOutputStream s)
+            r (-> in
+                  (InputStreamReader.)
+                  (BufferedReader.))
+            w (PrintWriter. out)]
+        (try 
+          (let [[op bname & args] (read-str-msg r)
+                op-key (-> op lower-case keyword)
+                b (buckets (-> bname keyword))
+                bop (op-map op-key)]
+            (write-str-msg w [(apply bop b args)])
+            (.flush w))
+          (catch Exception e
+            (.printStackTrace e))
+          (finally
+           (.close out)
+           (.close in)
+           (.close s)))))))
 
 (defn start-net-bucket-server [buckets port]
-  (start
-   (with-log :error
-     (partial server (bucket-server
-		      buckets)
-	     (comp read-str-msg reader)
-	     (fn [s msg]
-	       (write-str-msg (writer s) msg))))
-   :port port))
+  (start (bucket-server buckets)
+         port
+         "127.0.0.1"))
 
 (defn net-bucket-client [host port]
-     (partial client host port
-	      (comp first read-str-msg reader)
-	      (fn [s msg]
-		(write-str-msg (writer s) msg))))
+  (partial client host port
+           (comp first read-str-msg reader)
+           (fn [s msg]
+             (write-str-msg (writer s) msg))))
 
 (defn mk-client-exec [c num-threads future-policy]
   (let [pool (Executors/newSingleThreadExecutor)]

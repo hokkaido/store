@@ -1,8 +1,7 @@
 (ns store.net-test
   (:use clojure.test
-        [plumbing.server :only [start server client]]
+        [plumbing.server :only [start stop server client]]
         [plumbing.serialize :only [read-str-msg write-str-msg reader writer]]
-        [clojure.contrib.server-socket :only [close-server]]
 	store.api
         store.net)
   (:import (java.net InetAddress)
@@ -51,7 +50,7 @@
 
     (test-client ["PUT" "b1" "http://aria42.com" "v"])
     (is (= "v" (test-client ["GET" "b1" "http://aria42.com"])))
-    (close-server s)))
+    (stop s)))
 
 (deftest mk-client-exec-test
   (let [b (store/hashmap-bucket)
@@ -59,7 +58,7 @@
 	[exec pool] (mk-client-exec test-client 5 #(.get %))]
     (exec ["PUT" "b1" "K" "V"])
     (is (= "V" (exec ["GET" "b1"  "K"])))
-    (close-server s)
+    (stop s)
     (.shutdown pool)))
 
 (deftest get-put-test
@@ -82,7 +81,7 @@
             :a2 {:b21 "b21val" :b22 22}}
            (store/bucket-get b "k3")))
 
-    (close-server s)))
+    (stop s)))
 
 (deftest bdb-server-test
   (let [db-env (bdb/bdb-env :path "/tmp/nettest"
@@ -106,4 +105,4 @@
     (is (= {:foo 0.99}
            (store/bucket-get b "k1")))
 
-    (close-server s)))
+    (stop s)))
