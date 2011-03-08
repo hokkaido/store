@@ -123,20 +123,21 @@
 						 {:body (.getBytes (json/generate-string body-arg) "UTF8")}))]
 			 (if (= (:status resp) 200) 
 			   (-> resp :body json/parse-string)
-			   (throw (RuntimeException. (format "Rest bucket server error: %s" (:body resp)))))))]    
+			   (throw (RuntimeException. (format "Rest bucket server error: %s" (:body resp)))))))
+	my-url-encode (fn [k] (-> k url-encode (.replaceAll "\\." "%2e")))]
    (reify 
      store.api.IReadBucket
-     (bucket-get [this k] (exec-request ["get" (url-encode k)]))
+     (bucket-get [this k] (exec-request ["get" (my-url-encode k)]))
      (bucket-seq [this] (exec-request ["seq"]))
-     (bucket-exists? [this k] (exec-request ["exists?" (url-encode k)]))
+     (bucket-exists? [this k] (exec-request ["exists?" (my-url-encode k)]))
      (bucket-keys [this] (exec-request ["keys"]))
      (bucket-batch-get [this ks] (exec-request ["batch-get"] ks))
-     (bucket-modified [this k] (exec-request ["modified" (url-encode k)]))
+     (bucket-modified [this k] (exec-request ["modified" (my-url-encode k)]))
 
      store.api.IWriteBucket
-     (bucket-put [this k v] (exec-request ["put" (url-encode k)] v))
-     (bucket-delete [this k] (exec-request ["delete" (url-encode k)]))
-     (bucket-merge [this k v] (exec-request ["merge" (url-encode k)] v))
+     (bucket-put [this k v] (exec-request ["put" (my-url-encode k)] v))
+     (bucket-delete [this k] (exec-request ["delete" (my-url-encode k)]))
+     (bucket-merge [this k v] (exec-request ["merge" (my-url-encode k)] v))
      (bucket-close [this] (exec-request ["close"]))
      (bucket-sync [this] (exec-request ["sync"])))))
 
