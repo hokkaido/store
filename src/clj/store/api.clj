@@ -128,6 +128,21 @@
        (bucket-sync [this] nil)
        (bucket-close [this] nil))))
 
+;;; Extend Read buckets to clojure maps
+
+(def ^:private read-bucket-map-impls
+     {:bucket-get (fn [this k] (this k))
+      :bucket-seq (fn [this] (seq this))
+      :bucket-batch-get (fn [this ks] (default-bucket-batch-get this ks))
+      :bucket-keys (fn [this] (keys this))
+      :bucket-exists? (fn [this k] (find this k))
+      })
+
+(doseq [c [clojure.lang.PersistentHashMap
+	   clojure.lang.PersistentArrayMap
+	   clojure.lang.PersistentStructMap]]
+  (extend c IReadBucket read-bucket-map-impls))
+
 
 ;;; Generic Buckets
 
