@@ -51,8 +51,10 @@
                          client/get)]
          (if-let [v (-log> resp :body
                            (json/parse-string))]
-           (with-meta v
-             {:last-modified (last-modified resp)})
+           (if (instance? clojure.lang.IObj v)
+             (with-meta v
+               {:last-modified (last-modified resp)})
+             v)
            nil)))
       (bucket-seq
        [this]
