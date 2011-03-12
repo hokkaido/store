@@ -26,11 +26,10 @@
    (.parse rfc2822-formatter d)))
 
 (defn last-modified [resp]
-  (if-let [d (-> resp
+  (when-let [d (-> resp
                  :headers
                  (get "last-modified"))]
-    (parse-rfc2822 d)
-    nil))
+    (silent parse-rfc2822 d)))
 
 (defn riak-bucket [& {:keys [server,name,port,prefix,bucket-config]
                       :or {server "http://127.0.0.1"
@@ -52,8 +51,10 @@
                          client/get)]
          (if-let [v (-log> resp :body
                            (json/parse-string))]
-           (with-meta v
-             {:last-modified (last-modified resp)})
+           (if (instance? clojure.lang.IObj v)
+             (with-meta v
+               {:last-modified (last-modified resp)})
+             v)
            nil)))
       (bucket-seq
        [this]
@@ -73,7 +74,7 @@
        (-> (str k)
            ring/url-encode
            mk-path
-           client/get
+           client/head
            last-modified))
 
       store.api.IWriteBucket

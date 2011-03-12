@@ -1,15 +1,15 @@
 (ns store.api
-  (:use    plumbing.core)
+  (:use plumbing.core
+        [clojure.java.io :only [file]])
   (:require 
    [ring.util.codec :as ring]
    [clojure.string :as str]
    [clj-json.core :as json])
   (:import [java.util.concurrent ConcurrentHashMap]))
 
-(set! *warn-on-reflection* false)
-
 (defprotocol IReadBucket
   (bucket-get [this k] "fetch value for key")
+  (bucket-batch-get [this ks] "values for many keys, return map with ks")
   (bucket-exists? [this k] "does key-value pair exists")
   (bucket-keys [this] "seq of existing keys")
   (bucket-seq [this] "seq of [k v] elems")
@@ -17,7 +17,7 @@
 
 (defprotocol IWriteBucket
   (bucket-put [this k v]
-	      "write value for key. return value can be anything")
+              "write value for key. return value can be anything")
   (bucket-delete [this k] "remove key-value pair")
   (bucket-update [this k f])
   (bucket-sync [this])
@@ -32,6 +32,9 @@
   (find-first
    (partial = k)
    (bucket-keys b)))
+
+(defn default-bucket-batch-get [b ks]
+  (into {} (for [k ks] [k (bucket-get b k)])))
 
 (defn default-bucket-update [b k f]
   (->>  k
@@ -51,40 +54,44 @@
 
 ;;; Simple Buckets
 
-(defn fs-bucket [^String dir-path]
+(defn fs-bucket [dir-path]
   ;; ensure directory exists
-  (let [f (java.io.File. dir-path)]
+  (let [f (if (string? dir-path)
+            (file dir-path)
+            dir-path)]
     (.mkdirs f)
     (reify IReadBucket
-           (bucket-get [this k]
-                       (let [f (java.io.File. f ^String (ring/url-encode k))]
-                         (when (.exists f) (-> f slurp read-string))))
+      (bucket-get [this k]
+                  (let [f (java.io.File. f ^String (ring/url-encode k))]
+                    (when (.exists f) (-> f slurp read-string))))
 
-           (bucket-seq [this] (default-bucket-seq this))
-	   
-           (bucket-exists? [this k]		
-                           (let [f (java.io.File. f ^String (ring/url-encode k))]
-                             (.exists f)))
+      (bucket-batch-get [this ks] (default-bucket-batch-get this ks))
 
-	   (bucket-keys [this]
-                        (for [^java.io.File c (.listFiles f)
-                              :when (and (.isFile c) (not (.isHidden c)))]
-                          (ring/url-decode (.getName c))))
+      (bucket-seq [this] (default-bucket-seq this))
+      
+      (bucket-exists? [this k]		
+                      (let [f (java.io.File. f ^String (ring/url-encode k))]
+                        (.exists f)))
 
-	   IWriteBucket
+      (bucket-keys [this]
+                   (for [^java.io.File c (.listFiles f)
+                         :when (and (.isFile c) (not (.isHidden c)))]
+                     (ring/url-decode (.getName c))))
 
-	   (bucket-put [this k v]
-                       (let [f (java.io.File. f ^String(ring/url-encode k))]
-                         (spit f (pr-str v))))
-           (bucket-delete [this k]
-                          (let [f (java.io.File. f ^String (ring/url-encode  k))]
-                            (.delete f)))
+      IWriteBucket
 
-           
-           (bucket-update [this k f]
-                          (default-bucket-update this k f))
-           (bucket-sync [this] nil)
-           (bucket-close [this] nil))))
+      (bucket-put [this k v]
+                  (let [f (java.io.File. f ^String(ring/url-encode k))]
+                    (spit f (pr-str v))))
+      (bucket-delete [this k]
+                     (let [f (java.io.File. f ^String (ring/url-encode  k))]
+                       (.delete f)))
+
+      
+      (bucket-update [this k f]
+                     (default-bucket-update this k f))
+      (bucket-sync [this] nil)
+      (bucket-close [this] nil))))
 
 (defn hashmap-bucket
   ([]
@@ -93,34 +100,51 @@
   ([^java.util.concurrent.ConcurrentHashMap h]
      (reify IReadBucket
 
-            (bucket-keys [this]
-			 (enumeration-seq (.keys h)))
-            (bucket-get [this k]
-			(.get h k))
-            (bucket-seq [this]
-			(for [^java.util.Map$Entry e
-			      (.entrySet h)]
-			  [(.getKey e) (.getValue e)]))
+       (bucket-keys [this]
+                    (enumeration-seq (.keys h)))
+       (bucket-get [this k]
+                   (.get h k))
+       (bucket-batch-get [this ks] (default-bucket-batch-get this ks))
+       
+       (bucket-seq [this]
+                   (for [^java.util.Map$Entry e
+                         (.entrySet h)]
+                     [(.getKey e) (.getValue e)]))
 
-	    (bucket-exists? [this k]
-                            (.containsKey h k))
+       (bucket-exists? [this k]
+                       (.containsKey h k))
 
-	    IWriteBucket
-	    (bucket-put [this k v]
-                        (.put h k v))
-            (bucket-delete [this k]
-                           (.remove h k))
-            (bucket-update [this k f]
-			   (loop []
-			     (let [v (.get h k) new-v (f v)			
-				   replaced? (cond
-					      (nil? v) (nil? (.putIfAbsent h k new-v))
-					      (nil? new-v) (or (nil? v) (.remove h k v))
-					      :else (.replace h k v new-v))]
-			       (when (not replaced?)
-				 (recur)))))
-            (bucket-sync [this] nil)
-            (bucket-close [this] nil))))
+       IWriteBucket
+       (bucket-put [this k v]
+                   (.put h k v))
+       (bucket-delete [this k]
+                      (.remove h k))
+       (bucket-update [this k f]
+                      (loop []
+                        (let [v (.get h k) new-v (f v)			
+                              replaced? (cond
+                                         (nil? v) (nil? (.putIfAbsent h k new-v))
+                                         (nil? new-v) (or (nil? v) (.remove h k v))
+                                         :else (.replace h k v new-v))]
+                          (when (not replaced?)
+                            (recur)))))
+       (bucket-sync [this] nil)
+       (bucket-close [this] nil))))
+
+;;; Extend Read buckets to clojure maps
+
+(def ^:private read-bucket-map-impls
+     {:bucket-get (fn [this k] (this k))
+      :bucket-seq (fn [this] (seq this))
+      :bucket-batch-get (fn [this ks] (default-bucket-batch-get this ks))
+      :bucket-keys (fn [this] (keys this))
+      :bucket-exists? (fn [this k] (find this k))
+      })
+
+(doseq [c [clojure.lang.PersistentHashMap
+	   clojure.lang.PersistentArrayMap
+	   clojure.lang.PersistentStructMap]]
+  (extend c IReadBucket read-bucket-map-impls))
 
 
 ;;; Generic Buckets
@@ -136,30 +160,31 @@
 
 (defn with-merge [b merge-fn]
   (reify           
-   IWriteBucket
-   (bucket-put [this k v] (bucket-put b k v))
-   (bucket-delete [this k] (bucket-delete b k))
-   (bucket-update [this k f] (bucket-update b k f))
-   (bucket-sync [this] (bucket-sync b))
-   (bucket-close [this] (bucket-close b))
-   (bucket-merge [this k v]
-		 (default-bucket-merge b (partial merge-fn k) k v))
-   (bucket-merger [this] merge-fn)
+    IWriteBucket
+    (bucket-put [this k v] (bucket-put b k v))
+    (bucket-delete [this k] (bucket-delete b k))
+    (bucket-update [this k f] (bucket-update b k f))
+    (bucket-sync [this] (bucket-sync b))
+    (bucket-close [this] (bucket-close b))
+    (bucket-merge [this k v]
+                  (default-bucket-merge b (partial merge-fn k) k v))
+    (bucket-merger [this] merge-fn)
 
-   IReadBucket
-   (bucket-get [this k] (bucket-get b k))
-   (bucket-exists? [this k] (bucket-exists? b k))
-   (bucket-keys [this] (bucket-keys b))
-   (bucket-seq [this] (bucket-seq b))
-   (bucket-modified [this k] (bucket-modified b k))))
+    IReadBucket
+    (bucket-get [this k] (bucket-get b k))
+    (bucket-batch-get [this k] (bucket-batch-get b k))
+    (bucket-exists? [this k] (bucket-exists? b k))
+    (bucket-keys [this] (bucket-keys b))
+    (bucket-seq [this] (bucket-seq b))
+    (bucket-modified [this k] (bucket-modified b k))))
 
 (defn bucket-merge-to!
   "merge takes (k to-value from-value)"
   [from to]
   {:pre [(or (map? from) (satisfies? IReadBucket from))
-	 (and (satisfies? IWriteBucket to))]}	 
+         (and (satisfies? IWriteBucket to))]}	 
   (doseq [[k v] (if (map? from) from
-		    (bucket-seq from))]
+                    (bucket-seq from))]
     (bucket-merge to k v))
   to)
 
@@ -168,58 +193,62 @@
   will flush memory bucket into underlying bucket using underyling bucket merge fn"
   ([bucket flush-merge-fn]
      (let [get-bucket #(with-merge (hashmap-bucket) flush-merge-fn)
-	   mem-bucket (java.util.concurrent.atomic.AtomicReference. (get-bucket))
-	   do-flush! #(let [cur (.getAndSet mem-bucket (get-bucket))]
-			(bucket-merge-to! cur bucket))]
+           mem-bucket (java.util.concurrent.atomic.AtomicReference. (get-bucket))
+           do-flush! #(let [cur (.getAndSet mem-bucket (get-bucket))]
+                        (bucket-merge-to! cur bucket))]
        (reify
-	store.api.IWriteBucket
-	(bucket-merge [this k v]
-		      (bucket-merge (.get mem-bucket) k v))		    (bucket-update [this k f]									   (bucket-update (.get mem-bucket) k f))
-		      
-		      (bucket-sync [this]
-				   (do-flush!)
-				   (bucket-sync bucket))
-		      (bucket-close [this]
-				    (do-flush!)
-				    (bucket-close bucket))		 
+         store.api.IWriteBucket
+         (bucket-merge [this k v]
+                       (bucket-merge (.get mem-bucket) k v))
+         (bucket-update [this k f]
+                        (bucket-update (.get mem-bucket) k f))
+                       
+         (bucket-sync [this]
+                      (do-flush!)
+                      (bucket-sync bucket))
+         (bucket-close [this]
+                       (do-flush!)
+                       (bucket-close bucket))		 
 
-		      store.api.IReadBucket
-		      (bucket-get [this k] (bucket-get bucket k))
-		      (bucket-seq [this] (bucket-seq bucket))
-		      (bucket-keys [this] (bucket-keys bucket)))))
+         store.api.IReadBucket
+         (bucket-get [this k] (bucket-get bucket k))
+         (bucket-batch-get [this k] (bucket-batch-get bucket k))
+         (bucket-seq [this] (bucket-seq bucket))
+         (bucket-keys [this] (bucket-keys bucket)))))
   
   ([b] (with-flush b (bucket-merger b))))
 
 (def read-ops
-     {:get bucket-get
-      :seq bucket-seq
-      :bucket (fn [bucket & args] bucket)
-      :keys bucket-keys
-      :get-ensure
-      (fn [bucket key default-fn]
-	(if-let [v (bucket-get bucket key)]
-	  v
-	  (let [res (default-fn)]
-	    (bucket-put bucket key res)
-	    res)))
-      :exists? bucket-exists?
-      :modified bucket-modified})
+  {:get bucket-get
+   :batch-get bucket-batch-get
+   :seq bucket-seq
+   :bucket (fn [bucket & args] bucket)
+   :keys bucket-keys
+   :get-ensure
+   (fn [bucket key default-fn]
+     (if-let [v (bucket-get bucket key)]
+       v
+       (let [res (default-fn)]
+         (bucket-put bucket key res)
+         res)))
+   :exists? bucket-exists?
+   :modified bucket-modified})
 
 (def write-ops
-     {:put bucket-put
-      :delete bucket-delete
-      :merge bucket-merge
-      :update bucket-update
-      :sync bucket-sync
-      :close bucket-close})
+  {:put bucket-put
+   :delete bucket-delete
+   :merge bucket-merge
+   :update bucket-update
+   :sync bucket-sync
+   :close bucket-close})
 
 (defn bucket-op [ops get-bucket]
   (fn [op bucket-name & args]
     (let [bucket (get-bucket bucket-name op)
-	  bucket-op (ops op)]
+          bucket-op (ops op)]
       (when (nil? bucket)
-	(throw (RuntimeException.
-		(format "Bucket doesn't exist: %s" bucket-name))))
+        (throw (RuntimeException.
+                (format "Bucket doesn't exist: %s" bucket-name))))
       (apply bucket-op bucket args))))
 
 (defn mk-store 
@@ -242,16 +271,21 @@
      (bucket-op
       (merge read-ops write-ops)
       (fn [bucket op]
-	(bucket-map bucket))))
+        (bucket-map bucket))))
   ([reads writes]
      (bucket-op
       (merge read-ops write-ops)
       (fn [bucket op]
-	(if (find read-ops op)
-	  (reads bucket)
-	  (writes bucket))))))
+        (if (find read-ops op)
+          (reads bucket)
+          (writes bucket))))))
 
 (defn hash-buckets [keyspace]
   (map-from-keys
    (fn [n] (hashmap-bucket))
+   keyspace))
+
+(defn fs-buckets [root-path keyspace]
+  (map-from-keys
+   (fn [n] (fs-bucket (file root-path n)))
    keyspace))

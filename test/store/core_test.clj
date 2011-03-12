@@ -64,9 +64,12 @@
 
 (deftest fs-store-test
   (let [root (java.io.File. ".")
-        s (-> (mk-store {"fs" (fs-bucket (.getAbsolutePath root))}) )]
+        s (-> (mk-store {"fs" (fs-bucket (.getAbsolutePath root))}))]
     (s :put "fs" "my-key" 2)
-    (is (.exists (java.io.File. root "my-key")))
+    (is (.exists (java.io.File. root "my-key"))))
+
+  (let [root (java.io.File. ".")
+        s (-> (mk-store {"fs" (fs-bucket root)}))]
     (is (= (s :get "fs" "my-key") 2))
     (s :delete "fs" "my-key")
     (is (not (.exists (java.io.File. root "my-key"))))))
@@ -125,3 +128,4 @@
     (bucket-sync b2)
     (is (= (bucket-get b1 "k") {"v1" "v"}))
     (is (= (bucket-get b2 "k") {"v1" "v"}))))
+
