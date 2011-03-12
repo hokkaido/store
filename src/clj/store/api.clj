@@ -1,5 +1,6 @@
 (ns store.api
-  (:use plumbing.core)
+  (:use plumbing.core
+        [clojure.java.io :only [file]])
   (:require 
    [ring.util.codec :as ring]
    [clojure.string :as str]
@@ -53,9 +54,11 @@
 
 ;;; Simple Buckets
 
-(defn fs-bucket [^String dir-path]
+(defn fs-bucket [dir-path]
   ;; ensure directory exists
-  (let [f (java.io.File. dir-path)]
+  (let [f (if (string? dir-path)
+            (file dir-path)
+            dir-path)]
     (.mkdirs f)
     (reify IReadBucket
       (bucket-get [this k]
@@ -280,4 +283,9 @@
 (defn hash-buckets [keyspace]
   (map-from-keys
    (fn [n] (hashmap-bucket))
+   keyspace))
+
+(defn fs-buckets [root-path keyspace]
+  (map-from-keys
+   (fn [n] (fs-bucket (file root-path n)))
    keyspace))
