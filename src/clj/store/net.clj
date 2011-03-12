@@ -90,4 +90,4 @@
       (bucket-update [this k f] (writer-exec ["UPDATE" name k]))		     
       (bucket-sync [this] (writer-exec ["SYNC" name]))		   
       (bucket-close [this] (writer-exec ["CLOSE" name]))	   
-      (bucket-merge [this k v] (writer-exec ["MERGE" name k v])))))		   
+      (bucket-merge [this k v] (writer-exec ["MERGE" name k v])))))

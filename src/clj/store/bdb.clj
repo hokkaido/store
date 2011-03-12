@@ -61,9 +61,6 @@
   (let [entry-key (to-entry k)]
     (.delete db nil entry-key)))
 
-;;http://download.oracle.com/docs/cd/E17076_02/html/java/com/sleepycat/db/EnvironmentConfig.html
-;;http://download.oracle.com/docs/cd/E17076_02/html/java/com/sleepycat/db/EnvironmentConfig.html
-
 (defn bdb-conf [read-only-db deferred-write cache-mode]
   (let []
     (doto (DatabaseConfig.)
@@ -71,6 +68,8 @@
       (.setAllowCreate (not read-only-db))
       (.setDeferredWrite deferred-write)
       (.setCacheMode (cache-modes cache-mode)))))
+
+;;http://download.oracle.com/docs/cd/E17277_02/html/java/com/sleepycat/je/EnvironmentConfig.html
 
 (defn bdb-env
   "Parameters:
@@ -85,7 +84,8 @@
              checkpoint-kb checkpoint-mins
 	     num-cleaner-threads 
              locking cache-percent clean-util-thresh
-	     checkpoint-high-priority?]
+	     checkpoint-high-priority?
+	     max-open-files]
       :or {read-only false
            path "/var/bdb/"
            checkpoint-kb 0
@@ -94,7 +94,8 @@
 	   clean-util-thresh 50
 	   checkpoint-high-priority? false
            locking true
-           cache-percent 60}}]
+           cache-percent 60
+	   max-open-files 512}}]
   (let [env-config (doto (EnvironmentConfig.)
                      (.setReadOnly read-only)
                      (.setAllowCreate (not read-only))
@@ -104,6 +105,8 @@
 				      (str num-cleaner-threads))
 		     (.setConfigParam (EnvironmentConfig/CHECKPOINTER_HIGH_PRIORITY)
 				      (str checkpoint-high-priority?))
+		     (.setConfigParam (EnvironmentConfig/LOG_FILE_CACHE_SIZE)
+				      (str max-open-files))
                      (.setLocking locking)
                      (.setCachePercent cache-percent))]
     (doto CheckpointConfig/DEFAULT
