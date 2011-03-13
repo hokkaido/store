@@ -128,6 +128,28 @@ But one noticeable difference is that, for Voldemort, we use a cache of stores i
           (.put m client c)
           c)))))
 
+
+JVM args
+
+-Xmx10g
+-Xms10g
+-server
+-Dcom.sun.management.jmxremote
+-Dcom.sun.management.jmxremote.port=5050
+-Dcom.sun.management.jmxremote.authenticate=false
+-Dcom.sun.management.jmxremote.ssl=false
+-XX:NewSize=1024m
+-XX:MaxNewSize=1024m
+-XX:+UseConcMarkSweepGC
+-XX:+UseParNewGC
+-XX:CMSInitializingOccupancyFraction=70
+-XX:SurvivorRatio=2
+-XX:+PrintTenuringDistribution
+-XX:+PrintGCDetails
+-XX:+PrintGCTimeStamps
+
+
+
 ## Sponsors
 
 YourKit is kindly supporting open source projects with its full-featured Java Profiler.

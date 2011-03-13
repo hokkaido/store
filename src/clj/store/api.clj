@@ -178,6 +178,25 @@
     (bucket-seq [this] (bucket-seq b))
     (bucket-modified [this k] (bucket-modified b k))))
 
+(defn compose-buckets [read-b write-b]
+  (reify           
+    IWriteBucket
+    (bucket-put [this k v] (bucket-put write-b k v))
+    (bucket-delete [this k] (bucket-delete write-b k))
+    (bucket-update [this k f] (bucket-update write-b k f))
+    (bucket-sync [this] (bucket-sync write-b))
+    (bucket-close [this] (bucket-close write-b))
+    (bucket-merge [this k v] (bucket-merge write-b k v))
+    (bucket-merger [this] (bucket-merger write-b))
+
+    IReadBucket
+    (bucket-get [this k] (bucket-get read-b k))
+    (bucket-batch-get [this k] (bucket-batch-get read-b k))
+    (bucket-exists? [this k] (bucket-exists? read-b k))
+    (bucket-keys [this] (bucket-keys read-b))
+    (bucket-seq [this] (bucket-seq read-b))
+    (bucket-modified [this k] (bucket-modified read-b k))))
+
 (defn bucket-merge-to!
   "merge takes (k to-value from-value)"
   [from to]
@@ -191,32 +210,29 @@
 (defn with-flush
   "takes a bucket that has with-merge and returns an in-memory bucket which will use bucket-merge to merge values using the flush-merge-fn and when bucket-sync is called on return bucket
   will flush memory bucket into underlying bucket using underyling bucket merge fn"
+  ([b]
+     (with-flush b (bucket-merger
+		    (if (coll? b) (first b) b))))
   ([bucket flush-merge-fn]
-     (let [get-bucket #(with-merge (hashmap-bucket) flush-merge-fn)
-           mem-bucket (java.util.concurrent.atomic.AtomicReference. (get-bucket))
+     (let [buckets (if (coll? bucket) bucket [bucket])
+	   get-bucket #(with-merge (hashmap-bucket) flush-merge-fn)
+           mem-bucket (java.util.concurrent.atomic.AtomicReference.
+		       (get-bucket))
            do-flush! #(let [cur (.getAndSet mem-bucket (get-bucket))]
-                        (bucket-merge-to! cur bucket))]
+                        (doseq [b buckets]
+			  (bucket-merge-to! cur b)))]
        (reify
-         store.api.IWriteBucket
-         (bucket-merge [this k v]
-                       (bucket-merge (.get mem-bucket) k v))
-         (bucket-update [this k f]
-                        (bucket-update (.get mem-bucket) k f))
-                       
-         (bucket-sync [this]
-                      (do-flush!)
-                      (bucket-sync bucket))
-         (bucket-close [this]
-                       (do-flush!)
-                       (bucket-close bucket))		 
-
-         store.api.IReadBucket
-         (bucket-get [this k] (bucket-get bucket k))
-         (bucket-batch-get [this k] (bucket-batch-get bucket k))
-         (bucket-seq [this] (bucket-seq bucket))
-         (bucket-keys [this] (bucket-keys bucket)))))
-  
-  ([b] (with-flush b (bucket-merger b))))
+	store.api.IWriteBucket
+	(bucket-merge [this k v]
+		      (bucket-merge (.get mem-bucket) k v))
+	(bucket-update [this k f]
+		       (bucket-update (.get mem-bucket) k f))
+	(bucket-sync [this]
+		     (do-flush!)
+		     (map bucket-sync buckets))
+	(bucket-close [this]
+		      (do-flush!)
+		      (map bucket-close buckets))))))
 
 (def read-ops
   {:get bucket-get

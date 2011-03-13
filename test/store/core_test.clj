@@ -126,6 +126,20 @@
     (bucket-merge b2 "k" {"v1" "v"})
     (is (nil? (bucket-get b1 "k")))
     (bucket-sync b2)
-    (is (= (bucket-get b1 "k") {"v1" "v"}))
-    (is (= (bucket-get b2 "k") {"v1" "v"}))))
+    (is (= (bucket-get b1 "k") {"v1" "v"}))))
 
+(deftest with-mulicast-test
+  (let [shitty-bucket #(with-merge
+		       (hashmap-bucket)
+		       (fnil (fn [_ v1 v2] (merge v1 v2)) {}))
+	remote-buckets
+	[(shitty-bucket)
+	 (shitty-bucket)]
+	local-bucket (shitty-bucket)
+	b2 (with-flush (cons local-bucket remote-buckets))]
+    (bucket-merge b2 "k" {"v1" "v"})
+    (doseq [x (cons local-bucket remote-buckets)]
+      (is (nil? (bucket-get x "k"))))
+    (bucket-sync b2)
+    (doseq [x (concat [local-bucket] remote-buckets)]
+      (is (= (bucket-get x "k")  {"v1" "v"})))))
