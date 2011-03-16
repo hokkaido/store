@@ -9,6 +9,7 @@
 	    Environment
 	    EnvironmentConfig
 	    DatabaseConfig
+	    Cursor
 	    OperationStatus
 	    CheckpointConfig
 	    CacheMode]
@@ -48,26 +49,25 @@
 (defn cursor-next
   "returns a fn which acts as a cursor over db. each call
    returns a [key value] pair. closes cursor when all entries exhausted"
-  [^Database db]
-  (let [cursor (.openCursor db nil nil)]
-   (fn [] 
-     (let [k (DatabaseEntry.) v (DatabaseEntry.)]	
-       (if (not (= (.getNext cursor k v LockMode/READ_UNCOMMITTED)
-		   OperationStatus/SUCCESS))
-	 ;; return nil
-	 (do (.close cursor)
-	     nil)
-	 [(from-entry k)
-	  (from-entry v)])))))
+  [^Cursor cursor]
+  (let [k (DatabaseEntry.) v (DatabaseEntry.)]	
+    (if (not (= (.getNext cursor k v LockMode/READ_UNCOMMITTED)
+		OperationStatus/SUCCESS))
+      ;; return nil
+      (do (.close cursor)
+	  nil)
+      [(from-entry k)
+       (from-entry v)])))
 
 (defn cursor-iter [^Database db]
-  (let [cursor-next (cursor-next db)
-	queued (java.util.concurrent.atomic.AtomicReference. (cursor-next))]
+  (let [cursor (.openCursor db nil nil)
+	get-next #(cursor-next cursor)
+	queued (java.util.concurrent.atomic.AtomicReference. (get-next))]
     (reify java.util.Iterator
 	   (hasNext [this] (boolean (.get queued)))
           (next [this]
             (let [res (.get queued)]
-	      (.set queued (cursor-next))
+	      (.set queued (get-next))
 	      res)))))
 
 (defn entries-seq
