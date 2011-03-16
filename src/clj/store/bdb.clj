@@ -17,6 +17,9 @@
 
 ;;http://download.oracle.com/docs/cd/E17277_02/html/GettingStartedGuide
 
+(defn megs [x] (* x 1000000))
+(defn seconds [x] (* x 1000))
+
 (def cache-modes {:default CacheMode/DEFAULT
                   :evict-bin CacheMode/EVICT_BIN
                   :evict-ln CacheMode/EVICT_LN
@@ -84,6 +87,16 @@
       (.setCacheMode (cache-modes cache-mode)))))
 
 ;;http://download.oracle.com/docs/cd/E17277_02/html/java/com/sleepycat/je/EnvironmentConfig.html
+;;https://github.com/voldemort/voldemort/blob/master/src/java/voldemort/store/bdb/BdbStorageConfiguration.java
+
+
+;;JVM m2.xlarge for dbdb instances
+;;https://gist.github.com/582a034e2e67563742da
+
+;;for crawl.
+;;java: when opening socket:  socket buffer size
+;;linux: tcp window scaling
+;;should be running on m2.large
 
 (defn bdb-env
   "Parameters:
@@ -94,38 +107,57 @@
    :clean-util-thresh - % to trigger log file cleaning (higher means cleaner)
    :locking - toggle locking, if turned off then the cleaner is also
    :cache-percent - percent of heap to use for BDB cache"
-  [& {:keys [path read-only
-             checkpoint-kb checkpoint-mins
+  [& {:keys [path
+	     read-only
+             checkpoint-kb  ;;corresponds to new
+	     checkpoint-mins ;;corresponda to new
 	     num-cleaner-threads 
-             locking cache-percent clean-util-thresh
+             locking
+	     lock-timeout
+	     cache-size ;;new
+	     clean-util-thresh
 	     checkpoint-high-priority?
-	     max-open-files]
+	     checkpoint-bytes-interval
+	     max-open-files
+	     min-file-utilization
+	     checkpoint-wakeup-interval
+	     log-file-max]
       :or {read-only false
            path "/var/bdb/"
            checkpoint-kb 0
-	   num-cleaner-threads 1
+	   num-cleaner-threads 3
            checkpoint-mins 0
 	   clean-util-thresh 50
+	   min-file-utilization 5
 	   checkpoint-high-priority? false
+	   checkpoint-bytes-interval (megs 5) ;;new
+	   checkpoint-wakeup-interval (seconds 30000) ;;in microseconds
            locking true
-           cache-percent 60
-	   max-open-files 512}}]
+	   lock-timeout 500 ;;new
+           cache-size (megs 512) ;;new -- based on % of heap give it about 2/3 of heap up to like 10 ... cap at 10 GB above
+	   max-open-files 512
+	   log-file-max (megs 64)}}]
   (let [env-config (doto (EnvironmentConfig.)
                      (.setReadOnly read-only)
                      (.setAllowCreate (not read-only))
 		     (.setConfigParam (EnvironmentConfig/CLEANER_MIN_UTILIZATION)
 				      (str clean-util-thresh))
+		     (.setConfigParam (EnvironmentConfig/CLEANER_MIN_FILE_UTILIZATION)
+				      (str min-file-utilization))
 		     (.setConfigParam (EnvironmentConfig/CLEANER_THREADS)
 				      (str num-cleaner-threads))
 		     (.setConfigParam (EnvironmentConfig/CHECKPOINTER_HIGH_PRIORITY)
 				      (str checkpoint-high-priority?))
+		     (.setConfigParam (EnvironmentConfig/CHECKPOINTER_WAKEUP_INTERVAL)
+				      (str checkpoint-wakeup-interval)) ;;new
+		     (.setConfigParam (EnvironmentConfig/CHECKPOINTER_BYTES_INTERVAL)
+				      (str checkpoint-bytes-interval)) ;;new
 		     (.setConfigParam (EnvironmentConfig/LOG_FILE_CACHE_SIZE)
 				      (str max-open-files))
+		     (.setConfigParam (EnvironmentConfig/LOG_FILE_MAX)  ;;new
+				      (str log-file-max))
                      (.setLocking locking)
-                     (.setCachePercent cache-percent))]
-    (doto CheckpointConfig/DEFAULT
-      (.setKBytes checkpoint-kb)
-      (.setMinutes checkpoint-mins))
+                     (.setCacheSize cache-size))]
     (Environment. (file path) env-config)))
 
 (defn ^long bdb-env-backup
