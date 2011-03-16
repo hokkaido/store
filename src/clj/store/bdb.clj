@@ -42,20 +42,34 @@
 	   OperationStatus/SUCCESS)
       (from-entry entry-val))))
 
+(defn cursor-next
+  "returns a fn which acts as a cursor over db. each call
+   returns a [key value] pair. closes cursor when all entries exhausted"
+  [^Database db]
+  (let [cursor (.openCursor db nil nil)]
+   (fn [] 
+     (let [k (DatabaseEntry.) v (DatabaseEntry.)]	
+       (if (not (= (.getNext cursor k v LockMode/READ_UNCOMMITTED)
+		   OperationStatus/SUCCESS))
+	 ;; return nil
+	 (do (.close cursor)
+	     nil)
+	 [(from-entry k)
+	  (from-entry v)])))))
+
+(defn cursor-iter [^Database db]
+  (let [cursor-next (cursor-next db)
+	queued (java.util.concurrent.atomic.AtomicReference. (cursor-next))]
+    (reify java.util.Iterator
+	   (hasNext [this] (boolean (.get queued)))
+          (next [this]
+            (let [res (.get queued)]
+	      (.set queued (cursor-next))
+	      res)))))
+
 (defn entries-seq
  [^Database db]
- (let [cursor (.openCursor db nil nil)]
-   (take-while identity
-               (repeatedly
-                #(let [k (DatabaseEntry.)
-                       v (DatabaseEntry.)]
-                   (if (not (= (.getNext cursor k v LockMode/READ_UNCOMMITTED)
-                               OperationStatus/SUCCESS))
-                     ;; return nil
-                     (do (.close cursor)
-                         nil)
-                     [(from-entry k)
-                      (from-entry v)]))))))
+ (iterator-seq (cursor-iter db)))
 
 (defn bdb-delete [^Database db k]
   (let [entry-key (to-entry k)]
