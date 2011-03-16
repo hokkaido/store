@@ -49,7 +49,7 @@
                (repeatedly
                 #(let [k (DatabaseEntry.)
                        v (DatabaseEntry.)]
-                   (if (not (= (.getNext cursor k v LockMode/DEFAULT)
+                   (if (not (= (.getNext cursor k v LockMode/READ_UNCOMMITTED)
                                OperationStatus/SUCCESS))
                      ;; return nil
                      (do (.close cursor)
