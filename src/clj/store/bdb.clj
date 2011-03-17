@@ -75,7 +75,6 @@
 ;;http://download.oracle.com/docs/cd/E17277_02/html/java/com/sleepycat/je/EnvironmentConfig.html
 ;;https://github.com/voldemort/voldemort/blob/master/src/java/voldemort/store/bdb/BdbStorageConfiguration.java
 
-
 ;;JVM m2.xlarge for dbdb instances
 ;;https://gist.github.com/582a034e2e67563742da
 
