@@ -12,14 +12,15 @@
                  [clomert "0.2.0"]
                  [com.sleepycat/je "4.1.7"]
                  [commons-io "2.0.1"]
-		 [compojure "0.6.1"]
-		 [ring/ring-core "0.3.7"]
-		 [ring/ring-jetty-adapter "0.3.7"]
+                 [compojure "0.6.1"]
+                 [ring/ring-core "0.3.7"]
+                 [ring/ring-jetty-adapter "0.3.7"]
                  [clj-time "0.3.0-SNAPSHOT"]]
   :dev-dependencies [[swank-clojure "1.3.0-SNAPSHOT"]
                      [robert/hooke "1.1.0"]]
   :source-path "src/clj"
   :java-source-path "src/java"
+  :jvm-opts ["-Xmx600m"]
   :test-selectors {:default (fn [v] (not (:system v)))
                    :system :system
                    :redis :redis
