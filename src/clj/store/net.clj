@@ -78,21 +78,23 @@
          "127.0.0.1"))
 
 (defn rest-bucket-handler [buckets]
-  (let [mk-response (fn [status s]
-		      {:body (json/generate-string s)
-		       :headers {"Content-Type" "application/json; charset=UTF-8"}
-		       :status status})
-	exec-request (fn [p & args]
-		       (let [bucket (buckets (p :name))
-			     bucket-op ((merge read-ops write-ops) (keyword (p :op)))]
-			 (cond
-			  (nil? bucket) (mk-response 500 {:error (str "Don't recognize bucket " (p :name))})
-			  (nil? bucket-op) (mk-response 500 {:error (str "Don't recognize op " (p :op))})
-			  :else (try
-				  (mk-response 200 (apply bucket-op bucket args))
-				  (catch Exception e
-				    (.printStackTrace e)
-				    (mk-response 500 {:error (str e)}))))))]
+  (let [mk-response (with-log :error
+		      (fn [status s]
+		       {:body (json/generate-string s)
+			:headers {"Content-Type" "application/json; charset=UTF-8"}
+			:status status}))
+	exec-request (with-log :error
+		       (fn [p & args]
+			(let [bucket (buckets (p :name))
+			      bucket-op ((merge read-ops write-ops) (keyword (p :op)))]
+			  (cond
+			   (nil? bucket) (mk-response 500 {:error (str "Don't recognize bucket " (p :name))})
+			   (nil? bucket-op) (mk-response 500 {:error (str "Don't recognize op " (p :op))})
+			   :else (try
+				   (mk-response 200 (apply bucket-op bucket args))
+				   (catch Exception e
+				     (.printStackTrace e)
+				     (mk-response 500 {:error (str e)})))))))]
     [ ;; seq, keys, sync, close    
      (GET "/store/:op/:name" {p :params} (exec-request p))
      ;; batch-get
@@ -116,15 +118,16 @@
 			   keywordize-map? false}}]
   (when (nil? name) (throw (RuntimeException. "Must specify rest-bucket name")))
   (let [base (format "http://%s:%d/store/" host port name)
-	exec-request (fn [[op & as] & [body-arg]]
-		       (let [uri (str base (str/join "/" (concat [op name] as)))
-			     resp (if-not body-arg (client/get uri)				    
-				    (client/post uri
-						 {:body (.getBytes (json/generate-string body-arg) "UTF8")}))]
-			 (if (= (:status resp) 200) 
-			   (-> resp :body json/parse-string)
-			   (throw (RuntimeException. (format "Rest bucket server error: %s" (:body resp)))))))
-	my-url-encode (fn [k] (-> k url-encode (.replaceAll "\\." "%2e")))]
+	exec-request (with-log :error
+		       (fn [[op & as] & [body-arg]]
+			(let [uri (str base (str/join "/" (concat [op name] as)))
+			      resp (if-not body-arg (client/get uri)				    
+					   (client/post uri
+							{:body (.getBytes (json/generate-string body-arg) "UTF8")}))]
+			  (if (= (:status resp) 200) 
+			    (-> resp :body json/parse-string)
+			    (throw (RuntimeException. (format "Rest bucket server error: %s" (:body resp))))))))
+	my-url-encode (with-log :error (fn [k] (-> k url-encode (.replaceAll "\\." "%2e"))))]
    (reify 
      store.api.IReadBucket
      (bucket-get [this k] (exec-request ["get" (my-url-encode k)]))
