@@ -88,26 +88,6 @@
 ;;     (is (= "v" (s :get "b1" "k")))))
 
 
-(deftest 
-  riak-store-test
-  (let [s (mk-store (map-from-keys
-		     (fn [n]
-		       (riak-bucket :name n)) ["b1","b2","b3"]))
-        f (partial s :get)]
-    (s :put "b1" "k" "v1")
-    (is (= (f "b1" "k") "v1"))
-    ;; test url encode
-    (s :put "b1" "http://url.com" "v2")    
-    (is (= (f "b1" "http://url.com")))
-    (is (= (into #{} ["k" "http://url.com"])
-	   (into #{} (s :keys "b1"))))
-    (s :delete "b1" "k")
-    (s :delete "b1" "http://url.com")
-    (is (empty? (s :keys "b1")))
-    (s :put "b2" "k2" {:a 1})
-    (is (= [["k2" {"a" 1}]] (s :seq "b2")))
-    (is (= [["k2" {"a" 1}]] (bucket-seq (s :bucket "b2"))))
-    (is (= 1 ((s :get "b2" "k2") "a")))))
 
 (deftest flush-test
   (let [b1 (hashmap-bucket)
