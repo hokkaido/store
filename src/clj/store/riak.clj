@@ -76,36 +76,37 @@
             :prefix (default \"riak\")
    You must provie :name argument for the bucket name"
   [& {:as opts}]
-  (reify
-   store.api.IReadBucket   
-   (bucket-get [this k]    
-      (exec-riak-req opts [k] :get nil (comp json/parse-string :body)))   
-   (bucket-seq [this]
-      (default-bucket-seq this))        
-   (bucket-keys [this]
-     (exec-riak-req
-        opts [] :get {:query-params {"keys" "stream"} :as :input-stream}
-	(comp process-keys-resp :body)
-	true))
-   (bucket-exists?
-    [this k]
-    (default-bucket-exists? this k))
-   (bucket-modified
-    [this k]
-    (exec-riak-req opts [k] :head nil last-modified))
+  (let [exec (with-log :error (partial exec-riak-req opts))]	       
+   (reify
+    store.api.IReadBucket   
+    (bucket-get [this k]    
+		(exec [k] :get nil (comp json/parse-string :body)))   
+    (bucket-seq [this]
+		(default-bucket-seq this))        
+    (bucket-keys [this]
+		 (exec
+		  [] :get {:query-params {"keys" "stream"} :as :input-stream}
+		  (comp process-keys-resp :body)
+		  true))
+    (bucket-exists?
+     [this k]
+     (default-bucket-exists? this k))
+    (bucket-modified
+     [this k]
+     (exec [k] :head nil last-modified))
    
-   store.api.IWriteBucket
-   (bucket-put
-    [this k v]
-    (exec-riak-req opts [k] :post (get-riak-json-body v) identity))  
-   (bucket-delete
-    [this k]
-    (exec-riak-req opts [k] :delete nil identity))	  
-   (bucket-update
-    [this k f]
-    (default-bucket-update this k f))
-   (bucket-sync [this] nil)
-   (bucket-close [this] nil)))
+    store.api.IWriteBucket
+    (bucket-put
+     [this k v]
+     (exec [k] :post (get-riak-json-body v) identity))  
+    (bucket-delete
+     [this k]
+     (exec [k] :delete nil identity))	  
+    (bucket-update
+     [this k f]
+     (default-bucket-update this k f))
+    (bucket-sync [this] nil)
+    (bucket-close [this] nil))))
 
 (defn riak-buckets [{:keys [riak-host, riak-port]} keyspace]
   (map-from-keys
