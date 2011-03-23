@@ -2,8 +2,7 @@
   (:use clj-json.core
         clojure.test
         store.riak
-        store.api
-        
+        store.api        
         [clj-time.coerce :only [to-date]]
         [clj-time.core :only [date-time now]]))
 
