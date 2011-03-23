@@ -45,7 +45,7 @@
 	   nil)))
 
 (defn get-riak-json-body [o]
-  {:body (.getBytes (json/generate-string o) "UTF8")
+  {:body (json/generate-string o)
    :content-type "application/json" :accepts :json})
 
 (defn get-riak-req-url [{:keys [server,name,port,prefix]
@@ -65,7 +65,10 @@
 	resp (apply client/request       
 	       #(fetcher-core/basic-http-client)
 	       method
-	       (assoc req-opts :url url)
+	       (-> req-opts
+		   (assoc :url url)
+		   (update-in [:body]
+			(fn [b] (when b (.getBytes b "UF8")))))
 	       (when no-gzip? [:accept-encoding nil]))]
     (handle-riak-resp process-body resp)))
 
