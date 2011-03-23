@@ -11,7 +11,7 @@
 	[ring.util.codec :only [url-decode url-encode]])
   (:require 	[clojure.string :as str]
             [clj-json.core :as json]
-            [clj-http.client :as client])
+            [fetcher.client :as client])
   (:import (java.net Socket InetAddress
                      ServerSocket SocketException)
            (java.io InputStreamReader BufferedReader
@@ -62,10 +62,11 @@
   (let [base (format "http://%s:%d/store/" host port name)
 	exec-request (with-log :error
 		       (fn [[op & as] & [body-arg]]
-			(let [uri (str base (str/join "/" (concat [op name] as)))
-			      resp (if-not body-arg (client/get uri)				    
-					   (client/post uri
-							{:body (.getBytes (json/generate-string body-arg) "UTF8")}))]
+			(let [url (str base (str/join "/" (concat [op name] as)))
+			      resp (if-not body-arg (client/request :get url)				    
+					   (client/request :post 
+							{:url url
+							 :body (.getBytes (json/generate-string body-arg) "UTF8")}))]
 			  (if (= (:status resp) 200) 
 			    (-> resp :body json/parse-string)
 			    (throw (RuntimeException. (format "Rest bucket server error: %s" (:body resp))))))))

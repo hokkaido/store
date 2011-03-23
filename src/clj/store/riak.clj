@@ -1,5 +1,6 @@
 (ns store.riak
-  (:require [clj-http.client :as client]
+  (:require [fetcher.client :as client]
+	    [fetcher.core :as fetcher-core]
             [ring.util.codec :as ring]
             [clojure.string :as str]
             [clj-json.core :as json]
@@ -31,6 +32,12 @@
                  (get "last-modified"))]
     (silent parse-rfc2822 d)))
 
+(defn process-keys-resp [body]
+  (decode-chunked-objs
+   (if (string? body)
+     (->> body (java.io.StringReader.) json/parsed-seq)
+     (->> body (map json/parse-string)))))
+
 (defn riak-bucket [& {:keys [server,name,port,prefix,bucket-config]
                       :or {server "http://127.0.0.1"
                            prefix "riak"
@@ -41,17 +48,21 @@
         mk-json (fn [o] {:body (.getBytes (json/generate-string o) "UTF8")
                          :content-type "application/json" :accepts :json})
 	exec-req (with-log :error		   
-		   (fn [args req-opts]
-		     (client/request
-		        (assoc req-opts
-			  :url (apply mk-path (map str args))))))
+		   (fn [args method req-opts & [no-gzip?]]
+		     (apply
+		      client/request
+		      #(fetcher-core/basic-http-client)
+		      method
+		      (assoc req-opts
+			:url (apply mk-path (map str args)))
+		      (when no-gzip? [:accept-encoding nil]))))
 	read-resp (with-log :error (comp json/parse-string :body))]
     ;; IBucket Implementatin
     (reify
       store.api.IReadBucket
       (bucket-get
        [this k]
-       (when-let [resp (exec-req [k] {:method :get})]
+       (when-let [resp (exec-req [k] :get nil)]
 	 (when-let [v (read-resp resp)]
 	  (if (not (instance? clojure.lang.IObj v))
 	    v	   
@@ -62,29 +73,29 @@
        (default-bucket-seq this))
       (bucket-keys
        [this]
-       (when-let [resp (exec-req []
-				 {:method :get
-				  :query-params {"keys" "stream"}})]
-	 (decode-chunked-objs
-	     (if (string? (:body resp))
-	       (->> resp :body (java.io.StringReader.) json/parsed-seq)
-	       (->> resp :body (map json/parse-string))))))
+       (let [read-keys-resp (with-silent
+			      (comp
+			       process-keys-resp
+			       :body
+			       (fn [req]
+				 (exec-req [] :get req true))))]
+	 (read-keys-resp
+	  {:query-params {"keys" "stream"}})))
       (bucket-exists?
        [this k]
        (default-bucket-exists? this k))
       (bucket-modified
        [this k]
-       (when-let [resp (exec-req [k] {:method :head})]
+       (when-let [resp (exec-req [k] :head nil)]
 	 (last-modified resp)))
       store.api.IWriteBucket
       (bucket-put
        [this k v]
-       (when-let [resp (exec-req [k] (assoc (mk-json v)
-				       :method :post))]
+       (when-let [resp (exec-req [k] :post  (mk-json v))]
 	 resp))  
       (bucket-delete
        [this k]
-       (when-let [resp (exec-req [k] {:method :delete})]
+       (when-let [resp (exec-req [k] :delete nil)]
 	 resp))	  
       (bucket-update
        [this k f]
