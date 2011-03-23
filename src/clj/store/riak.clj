@@ -33,10 +33,10 @@
     (silent parse-rfc2822 d)))
 
 (defn process-keys-resp [body]
-  (decode-chunked-objs
-   (if (string? body)
-     (->> body (java.io.StringReader.) json/parsed-seq)
-     (->> body (map json/parse-string)))))
+  (-> body
+      (java.io.InputStreamReader.)
+      json/parsed-seq
+      decode-chunked-objs))
 
 (defn handle-riak-resp [process-resp {:keys [status,body,url] :as resp}]
   (case status
@@ -69,7 +69,13 @@
 	       (when no-gzip? [:accept-encoding nil]))]
     (handle-riak-resp process-body resp)))
 
-(defn riak-bucket [& {:as opts}]
+(defn riak-bucket
+  "opts consists of
+            :server (default \"http://localhost\")
+            :port (default \"8098\")
+            :prefix (default \"riak\")
+   You must provie :name argument for the bucket name"
+  [& {:as opts}]
   (reify
    store.api.IReadBucket   
    (bucket-get [this k]    
@@ -78,7 +84,7 @@
       (default-bucket-seq this))        
    (bucket-keys [this]
      (exec-riak-req
-        opts [] :get {:query-params {"keys" "stream"}}
+        opts [] :get {:query-params {"keys" "stream"} :as :input-stream}
 	(comp process-keys-resp :body)
 	true))
    (bucket-exists?
