@@ -96,8 +96,13 @@
         f (partial s :get)]
     (s :put "b1" "k" "v1")
     (is (= (f "b1" "k") "v1"))
-    (is (= ["k"] (s :keys "b1")))
+    ;; test url encode
+    (s :put "b1" "http://url.com" "v2")    
+    (is (= (f "b1" "http://url.com")))
+    (is (= (into #{} ["k" "http://url.com"])
+	   (into #{} (s :keys "b1"))))
     (s :delete "b1" "k")
+    (s :delete "b1" "http://url.com")
     (is (empty? (s :keys "b1")))
     (s :put "b2" "k2" {:a 1})
     (is (= [["k2" {"a" 1}]] (s :seq "b2")))

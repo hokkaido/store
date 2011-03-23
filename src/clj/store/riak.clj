@@ -54,7 +54,9 @@
 		      #(fetcher-core/basic-http-client)
 		      method
 		      (assoc req-opts
-			:url (apply mk-path (map str args)))
+			:url (->> args
+				  (map (comp ring/url-encode str))
+				  (apply mk-path)))
 		      (when no-gzip? [:accept-encoding nil]))))
 	read-resp (with-log :error (comp json/parse-string :body))]
     ;; IBucket Implementatin
