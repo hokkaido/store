@@ -68,7 +68,7 @@
 	       (-> req-opts
 		   (assoc :url url)
 		   (update-in [:body]
-			(fn [b] (when b (.getBytes b "UF8")))))
+			(fn [b] (when b (.getBytes b "UTF8")))))
 	       (when no-gzip? [:accept-encoding nil]))]
     (handle-riak-resp process-body resp)))
 
