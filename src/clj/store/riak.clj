@@ -41,8 +41,8 @@
 (defn handle-riak-resp [process-resp {:keys [status,body,url] :as resp}]
   (case status
    (200 300 304 204) (process-resp resp)
-   404 (do (log/error (format "Unable to satisfy request %s" resp))
-	   nil)))
+   (404 400) (do (log/error (format "Unable to satisfy request %s" resp))
+		 nil)))
 
 (defn get-riak-json-body [o]
   {:body (json/generate-string o)
