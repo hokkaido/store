@@ -113,18 +113,54 @@
     (bucket-sync b2)
     (is (= (bucket-get b1 "k") {"v1" "v"}))))
 
-(deftest with-mulicast-test
+(deftest with-flush-multicast-test
   (let [shitty-bucket #(with-merge
-		       (hashmap-bucket)
-		       (fnil (fn [_ v1 v2] (merge v1 v2)) {}))
-	remote-buckets
-	[(shitty-bucket)
-	 (shitty-bucket)]
-	local-bucket (shitty-bucket)
-	b2 (with-flush (cons local-bucket remote-buckets))]
+                         (hashmap-bucket)
+                         (fnil (fn [_ v1 v2] (merge v1 v2)) {}))
+        remote-buckets
+        [(shitty-bucket)
+         (shitty-bucket)]
+        local-bucket (shitty-bucket)
+        b2 (with-flush (cons local-bucket remote-buckets))]
     (bucket-merge b2 "k" {"v1" "v"})
     (doseq [x (cons local-bucket remote-buckets)]
       (is (nil? (bucket-get x "k"))))
     (bucket-sync b2)
     (doseq [x (concat [local-bucket] remote-buckets)]
       (is (= (bucket-get x "k")  {"v1" "v"})))))
+
+(deftest with-multicast-test
+  (let [b1 (hashmap-bucket)
+        b2 (hashmap-bucket)
+        mb (with-multicast [b1 b2])]
+    (bucket-put mb "k1" "v1")
+    (bucket-put mb "k2" "v2")
+    (are [x y] (= x y)
+         "v1" (bucket-get b1 "k1")
+         "v2" (bucket-get b1 "k2")
+         "v1" (bucket-get b2 "k1")
+         "v2" (bucket-get b2 "k2"))))
+
+(deftest with-layers-test
+  (let [top (hashmap-bucket)
+        mid (hashmap-bucket)
+        bot (hashmap-bucket)
+        lb (with-layers [top mid bot])]
+    (bucket-put top "k1" "vt")
+    (bucket-put mid "k1" "vm")
+    (bucket-put bot "k1" "vb")
+    (is (= "vt" (bucket-get lb "k1")))
+
+    (bucket-put mid "k2" "vvm")
+    (bucket-put bot "k2" "vvb")
+    (is (= "vvm" (bucket-get lb "k2")))
+
+    (bucket-put bot "k3" "vvvb")
+    (is (= "vvvb" (bucket-get lb "k3")))
+
+    (is (= nil (bucket-get lb "dne")))
+
+    (is (bucket-exists? lb "k1"))
+    (is (bucket-exists? lb "k2"))
+    (is (bucket-exists? lb "k3"))
+    (is (not (bucket-exists? lb "dne")))))
