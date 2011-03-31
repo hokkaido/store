@@ -323,7 +323,8 @@
                   (let [[b & rst] bs]
                     (cond
                      (empty? bs) nil
-                     (bucket-exists? b k) (bucket-get b k)
+                     (or (= 1 (count bs)) ; no check for bottom store
+                         (bucket-exists? b k)) (bucket-get b k)
                      :else (recur rst)))))
     (bucket-exists? [this k]
                     (loop [bs buckets]
