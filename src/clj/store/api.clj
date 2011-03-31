@@ -207,25 +207,6 @@
     (bucket-merge to k v))
   to)
 
-(defn with-layers
-  [buckets]
-  (reify
-    IReadBucket
-    (bucket-get [this k]
-                (loop [bs buckets]
-                  (let [[b & rst] bs]
-                    (cond
-                     (empty? bs) nil
-                     (bucket-exists? b k) (bucket-get b k)
-                     :else (recur rst)))))
-    (bucket-exists? [this k]
-                    (loop [bs buckets]
-                      (let [[b & rst] bs]
-                        (cond
-                         (empty? bs) false
-                         (bucket-exists? b k) true
-                         :else (recur rst)))))))
-
 (defn with-multicast
   [buckets]
   (reify
@@ -332,3 +313,28 @@
   (map-from-keys
    (fn [n] (fs-bucket (file root-path n)))
    keyspace))
+
+(defn with-layers
+  [buckets]
+  (reify
+    IReadBucket
+    (bucket-get [this k]
+                (loop [bs buckets]
+                  (let [[b & rst] bs]
+                    (cond
+                     (empty? bs) nil
+                     (bucket-exists? b k) (bucket-get b k)
+                     :else (recur rst)))))
+    (bucket-exists? [this k]
+                    (loop [bs buckets]
+                      (let [[b & rst] bs]
+                        (cond
+                         (empty? bs) false
+                         (bucket-exists? b k) true
+                         :else (recur rst)))))))
+
+(defn layered-store [bucket-names top-s btm-s]
+  (mk-store (zipmap bucket-names
+                    (map (fn [n] (with-layers [(top-s :bucket n)
+                                               (btm-s :bucket n)]))
+                         bucket-names))))

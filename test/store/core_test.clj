@@ -164,3 +164,19 @@
     (is (bucket-exists? lb "k2"))
     (is (bucket-exists? lb "k3"))
     (is (not (bucket-exists? lb "dne")))))
+
+(deftest layered-store-test
+  (let [top-s (mk-store {"b" (hashmap-bucket)
+                         "top-only" (hashmap-bucket)})
+        btm-s (mk-store {"b" (hashmap-bucket)
+                         "btm-only" (hashmap-bucket)})
+        layered-s (layered-store ["b"] top-s btm-s)]
+    (top-s :put "b" "both-k" "top-v")
+    (btm-s :put "b" "both-k" "btm-v")
+    (top-s :put "b" "top-k" "top-v")
+    (btm-s :put "b" "btm-k" "btm-v")
+
+    (is (= "top-v" (layered-s :get "b" "both-k")))
+    (is (= "top-v" (layered-s :get "b" "top-k")))
+    (is (= "btm-v" (layered-s :get "b" "btm-k")))
+    (is (nil? (layered-s :get "b" "dne")))))
