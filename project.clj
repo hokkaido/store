@@ -18,8 +18,6 @@
                  [clj-time "0.3.0-SNAPSHOT"]]
   :dev-dependencies [[swank-clojure "1.3.0-SNAPSHOT"]
                      [robert/hooke "1.1.0"]]
-  :source-path "src/clj"
-  :java-source-path "src/java"
   :jvm-opts ["-Xmx600m"]
   :test-selectors {:default (fn [v] (not (:system v)))
                    :system :system

@@ -1,11 +1,18 @@
 (ns store.riak-test
   (:use clj-json.core
+	clojure.java.shell
         clojure.test
         store.riak
         store.api
 	plumbing.core
         [clj-time.coerce :only [to-date]]
         [clj-time.core :only [date-time now]]))
+
+;;will work but we need to config riak not to use sudo and require password when we start it.
+#_(use-fixtures :once (fn [f]
+		      (sh "riak" "start")
+		      (f)
+		      (sh "riak" "stop")))
 
 (deftest decode-chunked-objs-test
 	 (let [bs [{"keys" ["foo"]}
