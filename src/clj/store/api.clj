@@ -333,9 +333,3 @@
                          (empty? bs) false
                          (bucket-exists? b k) true
                          :else (recur rst)))))))
-
-(defn layered-store [bucket-names top-s btm-s]
-  (mk-store (zipmap bucket-names
-                    (map (fn [n] (with-layers [(top-s :bucket n)
-                                               (btm-s :bucket n)]))
-                         bucket-names))))

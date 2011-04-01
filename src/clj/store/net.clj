@@ -2,14 +2,12 @@
   (:use store.api
         [clojure.java.io :only [file copy]]
         [clojure.contrib.shell :only [sh]]
-        [plumbing.serialize :only [reader writer read-str-msg write-str-msg]]
-        [plumbing.server :only [client server start]]
         [plumbing.core :only [print-all with-timeout with-log keywordize-map]]
         [clojure.string :only [lower-case]]
         [ring.adapter.jetty :only [run-jetty]]
         [compojure.core :only [GET POST PUT routes]]
 	[ring.util.codec :only [url-decode url-encode]])
-  (:require 	[clojure.string :as str]
+  (:require [clojure.string :as str]
             [clj-json.core :as json]
             [fetcher.client :as client])
   (:import (java.net Socket InetAddress
