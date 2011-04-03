@@ -85,8 +85,7 @@
 ;;   (let [s (mk-store
 ;; 	   (map-from-keys redis-bucket ["b1" "b2"]))]
 ;;     (s :put "b1" "k" "v")
-;;     (is (= "v" (s :get "b1" "k")))))
-
+;;     (is (= "v" (s :get "b1" "
 
 
 (deftest flush-test
@@ -140,6 +139,17 @@
          "v2" (bucket-get b1 "k2")
          "v1" (bucket-get b2 "k1")
          "v2" (bucket-get b2 "k2"))))
+
+(deftest add-listeners-test
+  (let [b  (hashmap-bucket)
+	b1 (hashmap-bucket)
+        b2 (hashmap-bucket)
+        mb (add-write-listeners b [b1 b2])]
+    (bucket-put mb "k1" "v1")
+    (is (= (bucket-seq mb)  [["k1" "v1"]]))
+    (is (= (bucket-get mb "k1") "v1"))
+    (is (= (bucket-get b1 "k1") "v1"))
+    (is (= (bucket-get b2 "k1") "v1"))))
 
 (deftest with-layers-test
   (let [top (hashmap-bucket)

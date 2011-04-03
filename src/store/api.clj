@@ -215,6 +215,10 @@
                 (doseq [b buckets]
                   (bucket-put b k v)))))
 
+(defn add-write-listeners [b listener-buckets]
+  (compose-buckets b     
+     (with-multicast (cons b listener-buckets))))
+
 (defn with-flush
   "takes a bucket that has with-merge and returns an in-memory bucket which will use bucket-merge to merge values using the flush-merge-fn and when bucket-sync is called on return bucket
   will flush memory bucket into underlying bucket using underyling bucket merge fn"
