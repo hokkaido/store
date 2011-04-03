@@ -3,7 +3,7 @@
         [clojure.java.io :only [file copy]]
         [clojure.contrib.shell :only [sh]]
         [plumbing.core :only [with-timeout
-			      keywordize-map]]
+                              keywordize-map]]
 	[plumbing.error :only [with-ex logger]]
         [clojure.string :only [lower-case]]
         [ring.adapter.jetty :only [run-jetty]]
@@ -19,35 +19,41 @@
            (java.util.concurrent Executors Future Callable TimeUnit)
            (org.apache.commons.io IOUtils)))
 
-(defn rest-bucket-handler [buckets]
+(defn exec-req
+  [buckets p & args]
   (let [mk-response (partial with-ex (logger)
                       (fn [status s]
                         {:body (json/generate-string s)
                          :headers {"Content-Type" "application/json; charset=UTF-8"}
                          :status status}))
-        exec-request (partial with-ex (logger)
-                       (fn [p & args]
-                         (let [bucket (buckets (p :name))
-                               bucket-op ((merge read-ops write-ops) (keyword (p :op)))]
-                           (cond
-                            (nil? bucket) (mk-response 500 {:error (str "Don't recognize bucket " (p :name))})
-                            (nil? bucket-op) (mk-response 500 {:error (str "Don't recognize op " (p :op))})
-                            :else (try
-                                    (mk-response 200 (apply bucket-op bucket args))
-                                    (catch Exception e
-                                      (.printStackTrace e)
-                                      (mk-response 500 {:error (str e)})))))))]
+        bucket (buckets (p :name))
+        bucket-op ((merge read-ops write-ops) (keyword (p :op)))]
+    (cond
+     (nil? bucket) (mk-response 500 {:error (str "Don't recognize bucket " (p :name))})
+     (nil? bucket-op) (mk-response 500 {:error (str "Don't recognize op " (p :op))})
+     :else (try
+             (mk-response 200 (apply bucket-op bucket args))
+             (catch Exception e
+               (.printStackTrace e)
+               (mk-response 500 {:error (str e)}))))))
+
+(defn rest-bucket-handler [buckets]
+  (let [exec-request (partial with-ex (logger) exec-req)]
     [ ;; seq, keys, sync, close    
-     (GET "/store/:op/:name" {p :params} (exec-request p))
+     (GET "/store/:op/:name" {p :params} (exec-request buckets p))
      ;; batch-get
      (POST "/store/:op/:name" {p :params b :body}
-           (exec-request (keywordize-map p)
+           (exec-request buckets
+                         (keywordize-map p)
                          (json/parse-string (IOUtils/toString ^java.io.InputStream b "UTF8"))))
      ;; get, modified, exists
-     (GET "/store/:op/:name/:key"  {p :params} (exec-request p (url-decode (p :key))))
+     (GET "/store/:op/:name/:key"  {p :params} (exec-request buckets
+                                                             p
+                                                             (url-decode (p :key))))
      ;; put, merge
      (POST "/store/:op/:name/:key" {p :params b :body}
-           (exec-request (keywordize-map p)
+           (exec-request buckets
+                         (keywordize-map p)
                          (url-decode (p :key))
                          (json/parse-string (IOUtils/toString ^java.io.InputStream b "UTF8"))))]))
 

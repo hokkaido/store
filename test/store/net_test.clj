@@ -3,7 +3,8 @@
         store.api
         store.net
         [store.core-test :only [generic-bucket-test]]
-        [plumbing.core :only [find-first]])
+        [plumbing.core :only [find-first]]
+        [plumbing.error :only [with-ex logger]])
   (:require [store.api :as store]))
 
 (use-fixtures :each
@@ -16,7 +17,33 @@
                   (f)
                   (.stop server))))
 
-(deftest net-bucket-test
+(deftest exec-req-test
+  (let [bs {"hm" (hashmap-bucket)
+            "fs" (fs-bucket "/tmp/store-net-test")}]
+    (is (= {:body "null"
+            :headers {"Content-Type" "application/json; charset=UTF-8"}
+            :status 200}
+           (exec-req bs {:name "hm" :op "put"} "k1" "v1")))
+    (is (= {:body "\"v1\""
+            :headers {"Content-Type" "application/json; charset=UTF-8"}
+            :status 200}
+           (exec-req bs {:name "hm" :op "get"} "k1")))
+
+    ;; NPE since hashmaps don't support nil vals
+    (is (= {:body "{\"error\":\"java.lang.NullPointerException\"}"
+            :headers {"Content-Type" "application/json; charset=UTF-8"}
+            :status 500}
+           (exec-req bs {:name "hm" :op "put"} "null-k" nil)))
+    (is (= {:body "null"
+            :headers {"Content-Type" "application/json; charset=UTF-8"}
+            :status 200}
+           (exec-req bs {:name "fs" :op "put"} "null-k" nil)))
+    (is (= {:body "null"
+            :headers {"Content-Type" "application/json; charset=UTF-8"}
+            :status 200}
+           (exec-req bs {:name "fs" :op "get"} "null-k")))))
+
+(deftest rest-bucket-test
   (let [b (rest-bucket :name "b1"
                        :host "localhost"
                        :port 4445)]
