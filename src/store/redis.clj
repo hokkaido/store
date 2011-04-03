@@ -1,6 +1,6 @@
 (ns store.redis
   (:use store.api
-	[plumbing.core :only [-->> with-log with-retries]])
+	[plumbing.core :only [-->> with-ex with-retries]])
   (:import [redis.clients.jedis JedisPool Jedis]))
            
 (defn- mk-key [bucket key] (format "%s:%s" bucket key))
@@ -14,9 +14,8 @@
 (defn with-jedis-client
   [^JedisPool pool client-timeout retry-count f]  
   (when-let [c (.getResource pool client-timeout)]
-    (let [res (-->> [c] f
-		    (with-retries retry-count)
-		    with-log)]      
+    (let [res (with-ex (logger)
+		(with-retries retry-count f) c)]      
       (.returnResource pool c)
       res)))
 

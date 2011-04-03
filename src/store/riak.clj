@@ -7,6 +7,7 @@
             [clj-time.coerce :as time-coerce])
   (:use store.api
         plumbing.core
+        plumbing.error
         plumbing.streams)
   (:require [clojure.contrib.logging :as log])
   (:import java.text.SimpleDateFormat
@@ -30,7 +31,8 @@
   (when-let [d (-> resp
                  :headers
                  (get "last-modified"))]
-    (silent parse-rfc2822 d)))
+    (try (parse-rfc2822 d)
+	 (catch java.lang.Exception _ nil))))
 
 (defn process-keys-resp [body]
   (-> body
@@ -60,7 +62,9 @@
 	 (concat req-base)
 	 (str/join "/"))))
 
-(defn exec-riak-req [riak-opts path-args method req-opts process-body & [no-gzip?]]
+(defn exec-riak-req [riak-opts path-args
+		     method req-opts
+		     process-body & [no-gzip?]]
   (let [url (get-riak-req-url riak-opts path-args)
 	resp (apply client/request       
 	       #(fetcher-core/basic-http-client)
@@ -79,7 +83,8 @@
             :prefix (default \"riak\")
    You must provie :name argument for the bucket name"
   [& {:as opts}]
-  (let [exec (with-log :error (partial exec-riak-req opts))]	       
+  (let [exec (partial with-ex (logger)
+		      (partial exec-riak-req opts))]	       
    (reify
     store.api.IReadBucket   
     (bucket-get [this k]    
