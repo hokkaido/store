@@ -2,7 +2,8 @@
   (:use store.api
         [clojure.java.io :only [file copy]]
         [clojure.contrib.shell :only [sh]]
-        [plumbing.core :only [print-all with-timeout with-log keywordize-map]]
+        [plumbing.core :only [print-all with-timeout
+			      with-ex keywordize-map]]
         [clojure.string :only [lower-case]]
         [ring.adapter.jetty :only [run-jetty]]
         [compojure.core :only [GET POST PUT routes]]
@@ -18,12 +19,12 @@
            (org.apache.commons.io IOUtils)))
 
 (defn rest-bucket-handler [buckets]
-  (let [mk-response (with-log :error
+  (let [mk-response (partial with-ex (logger)
 		      (fn [status s]
 		       {:body (json/generate-string s)
 			:headers {"Content-Type" "application/json; charset=UTF-8"}
 			:status status}))
-	exec-request (with-log :error
+	exec-request (partial with-ex (logger)
 		       (fn [p & args]
 			(let [bucket (buckets (p :name))
 			      bucket-op ((merge read-ops write-ops) (keyword (p :op)))]
@@ -58,7 +59,7 @@
 			   keywordize-map? false}}]
   (when (nil? name) (throw (RuntimeException. "Must specify rest-bucket name")))
   (let [base (format "http://%s:%d/store/" host port name)
-	exec-request (with-log :error
+	exec-request (partial with-ex (logger)
 		       (fn [[op & as] & [body-arg]]
 			(let [url (str base (str/join "/" (concat [op name] as)))
 			      resp (if-not body-arg (client/request :get url)				    
@@ -68,7 +69,9 @@
 			  (if (= (:status resp) 200) 
 			    (-> resp :body json/parse-string)
 			    (throw (RuntimeException. (format "Rest bucket server error: %s" (:body resp))))))))
-	my-url-encode (with-log :error (fn [k] (-> k url-encode (.replaceAll "\\." "%2e"))))]
+	my-url-encode (partial with-ex (logger)
+			       (fn [k] (-> k url-encode
+					   (.replaceAll "\\." "%2e"))))]
    (reify 
      store.api.IReadBucket
      (bucket-get [this k] (exec-request ["get" (my-url-encode k)]))
