@@ -1,7 +1,8 @@
 (ns store.core-test
+  (:require [clj-time.core :as time])
   (:use clojure.test
         store.api
-	store.riak
+        store.riak
         [plumbing.core :only [find-first map-from-keys]]))
 
 (defn generic-bucket-test [b]
@@ -61,6 +62,20 @@
    (fs-bucket
     (.getAbsolutePath (java.io.File. "store-core-test-dir"))))
   (.deleteOnExit (java.io.File. "store-core-test-dir")))
+
+(deftest fs-bucket-modified-test
+  (let [b (fs-bucket (.getAbsolutePath
+                      (java.io.File. "store-core-test-dir")))]
+    (bucket-put b "k1" "v1")
+    (Thread/sleep 1000)
+    (bucket-put b "k2" "v2")
+    
+    (is (> 5 (time/in-secs
+              (time/interval
+               (bucket-modified b "k1")
+               (time/now)))))
+    (is (time/before? (bucket-modified b "k1")
+                      (bucket-modified b "k2")))))
 
 (deftest fs-store-test
   (let [root (java.io.File. ".")

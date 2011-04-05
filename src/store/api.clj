@@ -4,8 +4,10 @@
   (:require 
    [ring.util.codec :as ring]
    [clojure.string :as str]
-   [clj-json.core :as json])
-  (:import [java.util.concurrent ConcurrentHashMap]))
+   [clj-json.core :as json]
+   [clj-time.coerce :as time.coerce])
+  (:import [java.util.concurrent ConcurrentHashMap]
+           [java.io File]))
 
 (defprotocol IReadBucket
   (bucket-get [this k] "fetch value for key")
@@ -60,34 +62,32 @@
             (file dir-path)
             dir-path)]
     (.mkdirs f)
-    (reify IReadBucket
+    (reify
+      IReadBucket
       (bucket-get [this k]
-                  (let [f (java.io.File. f ^String (ring/url-encode k))]
+                  (let [f (File. f ^String (ring/url-encode k))]
                     (when (.exists f) (-> f slurp read-string))))
-
       (bucket-batch-get [this ks] (default-bucket-batch-get this ks))
-
-      (bucket-seq [this] (default-bucket-seq this))
-      
+      (bucket-seq [this] (default-bucket-seq this))     
       (bucket-exists? [this k]		
-                      (let [f (java.io.File. f ^String (ring/url-encode k))]
+                      (let [f (File. f ^String (ring/url-encode k))]
                         (.exists f)))
-
       (bucket-keys [this]
-                   (for [^java.io.File c (.listFiles f)
+                   (for [^File c (.listFiles f)
                          :when (and (.isFile c) (not (.isHidden c)))]
                      (ring/url-decode (.getName c))))
-
+      (bucket-modified [this k]
+                       (time.coerce/from-long
+                        (.lastModified (File. dir-path 
+                                              ^String (ring/url-encode k)))))
+      
       IWriteBucket
-
       (bucket-put [this k v]
-                  (let [f (java.io.File. f ^String(ring/url-encode k))]
+                  (let [f (File. f ^String(ring/url-encode k))]
                     (spit f (pr-str v))))
       (bucket-delete [this k]
-                     (let [f (java.io.File. f ^String (ring/url-encode  k))]
+                     (let [f (File. f ^String (ring/url-encode  k))]
                        (.delete f)))
-
-      
       (bucket-update [this k f]
                      (default-bucket-update this k f))
       (bucket-sync [this] nil)
