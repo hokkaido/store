@@ -38,21 +38,21 @@
                (mk-response 500 {:error (str e)}))))))
 
 (defn rest-bucket-handler [buckets]
-  (let [exec-request (partial with-ex (logger) exec-req)]
+  (let [exec-request (partial with-ex (logger) exec-req buckets)]
     [ ;; seq, keys, sync, close    
-     (GET "/store/:op/:name" {p :params} (exec-request buckets p))
+     (GET "/store/:op/:name" {p :params} (exec-request  p))
      ;; batch-get
      (POST "/store/:op/:name" {p :params b :body}
-           (exec-request buckets
+           (exec-request 
                          (keywordize-map p)
                          (json/parse-string (IOUtils/toString ^java.io.InputStream b "UTF8"))))
      ;; get, modified, exists
-     (GET "/store/:op/:name/:key"  {p :params} (exec-request buckets
+     (GET "/store/:op/:name/:key"  {p :params} (exec-request 
                                                              p
                                                              (url-decode (p :key))))
      ;; put, merge
      (POST "/store/:op/:name/:key" {p :params b :body}
-           (exec-request buckets
+           (exec-request 
                          (keywordize-map p)
                          (url-decode (p :key))
                          (json/parse-string (IOUtils/toString ^java.io.InputStream b "UTF8"))))]))

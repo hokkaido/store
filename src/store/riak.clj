@@ -43,8 +43,8 @@
 (defn handle-riak-resp [process-resp {:keys [status,body,url] :as resp}]
   (case status
    (200 300 304 204) (process-resp resp)
-   (404 400 503) (do (log/error (format "Unable to satisfy request %s" resp))
-		     nil)))
+   (404 400 503) (throw (RuntimeException.
+			 (format "Unable to satisfy request %s" resp)))))
 
 (defn get-riak-json-body [o]
   {:body (json/generate-string o)
@@ -82,9 +82,11 @@
             :port (default \"8098\")
             :prefix (default \"riak\")
    You must provie :name argument for the bucket name"
-  [& {:as opts}]
-  (let [exec (partial with-ex (logger)
-		      (partial exec-riak-req opts))]	       
+  [& {:keys [observer]
+      :or {observer (constantly nil)}
+      :as opts}]
+  (let [exec (partial with-ex observer
+	       exec-riak-req opts)]	       
    (reify
     store.api.IReadBucket   
     (bucket-get [this k]    
@@ -115,10 +117,3 @@
      (default-bucket-update this k f))
     (bucket-sync [this] nil)
     (bucket-close [this] nil))))
-
-(defn riak-buckets [{:keys [riak-host, riak-port]} keyspace]
-  (map-from-keys
-   (fn [n] (riak-bucket :name n
-                        :server riak-host
-                        :port riak-port))
-   keyspace))

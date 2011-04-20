@@ -8,12 +8,6 @@
         [clj-time.coerce :only [to-date]]
         [clj-time.core :only [date-time now]]))
 
-;;will work but we need to config riak not to use sudo and require password when we start it.
-#_(use-fixtures :once (fn [f]
-		      (sh "riak" "start")
-		      (f)
-		      (sh "riak" "stop")))
-
 (deftest decode-chunked-objs-test
 	 (let [bs [{"keys" ["foo"]}
 		   {"keys" ["bar" "baz"]}
@@ -31,12 +25,19 @@
 
 (deftest 
   riak-store-test
-  (let [s (mk-store (map-from-keys
-		     (fn [n]
-		       (riak-bucket :name n)) ["b1","b2","b3"]))
+  (let [errs (atom nil)
+	get-bucket #(riak-bucket
+		       :name %
+		       :observer
+		         (fn [e & _]
+			   (swap! errs conj e)
+			   nil))
+	s (mk-store (map-from-keys get-bucket
+		       ["b1","b2","b3"]))
         f (partial s :get)]
     (s :put "b1" "k" "v1")
     (is (nil? (s :get "b1" "not-found")))
+    (is (= 1 (count @errs)))
     (is (= (f "b1" "k") "v1"))
     ;; test url encode
     (s :put "b1" "http://url.com" "v2")    
@@ -50,11 +51,3 @@
     (is (= [["k2" {"a" 1}]] (s :seq "b2")))
     (is (= [["k2" {"a" 1}]] (bucket-seq (s :bucket "b2"))))
     (is (= 1 ((s :get "b2" "k2") "a")))))
-
-;; TODO: setup a bucket
-#_(deftest ^{:system true} bucket-modified-test
-  (is (nil? (bucket-modified b
-                             "this-key-doesnt-exist")))
-  (is (before? (now)
-               (bucket-modified b
-                                "this-key-exists"))))
