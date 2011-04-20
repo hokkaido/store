@@ -34,7 +34,10 @@
 			   nil))
 	s (mk-store (map-from-keys get-bucket
 		       ["b1","b2","b3"]))
-        f (partial s :get)]
+        f (partial s :get)
+	b (riak-bucket :name "b-key" :keywordize? true)]
+    (bucket-put b "k" {:a 1})
+    (is (= {:a 1} (bucket-get b "k")))
     (s :put "b1" "k" "v1")
     (is (nil? (s :get "b1" "not-found")))
     (is (= 1 (count @errs)))

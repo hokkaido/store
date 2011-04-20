@@ -82,7 +82,7 @@
             :port (default \"8098\")
             :prefix (default \"riak\")
    You must provie :name argument for the bucket name"
-  [& {:keys [observer]
+  [& {:keys [observer,keywordize?]
       :or {observer (constantly nil)}
       :as opts}]
   (let [exec (partial with-ex observer
@@ -90,7 +90,10 @@
    (reify
     store.api.IReadBucket   
     (bucket-get [this k]    
-		(exec [k] :get nil (comp json/parse-string :body)))   
+		(let [res (exec [k] :get nil (comp json/parse-string :body))]
+		  (if keywordize?
+		    (keywordize-map res)
+		    res)))   
     (bucket-seq [this]
 		(default-bucket-seq this))        
     (bucket-keys [this]
