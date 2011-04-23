@@ -1,6 +1,5 @@
 (ns store.riak
-  (:require [fetcher.client :as client]
-	    [fetcher.core :as fetcher-core]
+  (:require [fetcher.core :as client]
             [ring.util.codec :as ring]
             [clojure.string :as str]
             [clj-json.core :as json]
@@ -66,8 +65,8 @@
 		     method req-opts
 		     process-body & [no-gzip?]]
   (let [url (get-riak-req-url riak-opts path-args)
-	resp (apply client/request       
-	       #(fetcher-core/basic-http-client)
+	resp (apply client/fetch       
+	       #(client/basic-http-client)
 	       method
 	       (-> req-opts
 		   (assoc :url url)

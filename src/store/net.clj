@@ -11,7 +11,7 @@
         [ring.util.codec :only [url-decode url-encode]])
   (:require [clojure.string :as str]
             [clj-json.core :as json]
-            [fetcher.client :as client])
+            [fetcher.core :as client])
   (:import (java.net Socket InetAddress
                      ServerSocket SocketException)
            (java.io InputStreamReader BufferedReader
@@ -78,11 +78,11 @@
                                         (str/join "/"
                                                   (concat [op name] as)))
                                resp (if-not body-arg
-                                      (client/request :get url)				    
-                                      (client/request :post 
-                                                      {:url url
-                                                       :body (.getBytes
-                                                              (json/generate-string body-arg)
+                                      (client/fetch :get url)				    
+                                      (client/fetch :post 
+						    {:url url
+						     :body (.getBytes
+							    (json/generate-string body-arg)
                                                               "UTF8")}))]
                            (if (= (:status resp)
                                   200) 
