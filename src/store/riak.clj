@@ -64,15 +64,13 @@
 (defn exec-riak-req
   [get-client riak-opts path-args
    method req-opts
-   process-body & [no-gzip?]]  
+   process-body]  
   (let [url (get-riak-req-url riak-opts path-args)
 	req (-> req-opts
 		(assoc :url url)
 		(update-in [:body]
 		  (fn [^String b] (when b (.getBytes b "UTF8")))))
-	resp (if no-gzip?
-	       (fetcher.core/fetch get-client method req :accept-encoding nil)
-	       (fetcher.core/fetch get-client method req))]
+	resp (fetcher.core/fetch get-client method req)]
     (handle-riak-resp process-body resp)))
 
 (defn riak-bucket
@@ -98,9 +96,10 @@
 		(default-bucket-seq this))        
     (bucket-keys [this]
 		 (exec
-		  [] :get {:query-params {"keys" "stream"} :as :input-stream}
-		  (comp process-keys-resp :body)
-		  true))
+		  [] :get {:query-params {"keys" "stream"}
+			   :as :input-stream
+			   :no-gzip? true}
+		  (comp process-keys-resp :body)))
     (bucket-exists?
      [this k]
      (default-bucket-exists? this k))
