@@ -61,18 +61,18 @@
 	 (concat req-base)
 	 (str/join "/"))))
 
-(defn exec-riak-req [riak-opts path-args
-		     method req-opts
-		     process-body & [no-gzip?]]
+(defn exec-riak-req
+  [get-client riak-opts path-args
+   method req-opts
+   process-body & [no-gzip?]]  
   (let [url (get-riak-req-url riak-opts path-args)
-	resp (apply client/fetch       
-	       #(client/basic-http-client)
-	       method
-	       (-> req-opts
-		   (assoc :url url)
-		   (update-in [:body]
-			(fn [^String b] (when b (.getBytes b "UTF8")))))
-	       (when no-gzip? [:accept-encoding nil]))]
+	req (-> req-opts
+		(assoc :url url)
+		(update-in [:body]
+		  (fn [^String b] (when b (.getBytes b "UTF8")))))
+	resp (if no-gzip?
+	       (fetcher.core/fetch get-client method req :accept-encoding nil)
+	       (fetcher.core/fetch get-client method req))]
     (handle-riak-resp process-body resp)))
 
 (defn riak-bucket
@@ -81,11 +81,12 @@
             :port (default \"8098\")
             :prefix (default \"riak\")
    You must provie :name argument for the bucket name"
-  [& {:keys [observer,keywordize?]
-      :or {observer (constantly nil)}
-      :as opts}]
+  [& {:keys [observer,keywordize?,get-client]
+      :or {observer (constantly nil)
+	   get-client fetcher.core/basic-http-client}
+      :as riak-opts}]
   (let [exec (partial with-ex observer
-	       exec-riak-req opts)]	       
+		exec-riak-req get-client riak-opts)] 	       
    (reify
     store.api.IReadBucket   
     (bucket-get [this k]    

@@ -5,6 +5,7 @@
         store.riak
         store.api
 	plumbing.core
+	plumbing.error
         [clj-time.coerce :only [to-date]]
         [clj-time.core :only [date-time now]]))
 
@@ -29,7 +30,8 @@
 	get-bucket #(riak-bucket
 		       :name %
 		       :observer
-		         (fn [e & _]
+		         (fn [e & rest]
+			   (apply (logger) e rest)
 			   (swap! errs conj e)
 			   nil))
 	s (mk-store (map-from-keys get-bucket
