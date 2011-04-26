@@ -2,7 +2,7 @@
   (:use store.api
         [clojure.java.io :only [file copy]]
         [clojure.contrib.shell :only [sh]]
-        [plumbing.core :only [with-timeout
+        [plumbing.core :only [
                               keywordize-map]]
 	[plumbing.error :only [with-ex logger]]
         [clojure.string :only [lower-case]]
