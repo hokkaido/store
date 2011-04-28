@@ -39,10 +39,10 @@
   (into {} (for [k ks] [k (bucket-get b k)])))
 
 (defn default-bucket-update [b k f]
-  (->>  k
-        (bucket-get b)
-        f
-        (bucket-put b k)))
+  (let [v (bucket-get b k)
+	new-v (f v)]
+    (when (not= new-v v)
+     (bucket-put b k new-v))))
 
 (defn default-bucket-seq [b]
   (for [k (bucket-keys b)]
@@ -123,6 +123,7 @@
                       (loop []
                         (let [v (.get h k) new-v (f v)			
                               replaced? (cond
+					 (= v new-v) true
                                          (nil? v) (nil? (.putIfAbsent h k new-v))
                                          (nil? new-v) (or (nil? v) (.remove h k v))
                                          :else (.replace h k v new-v))]
