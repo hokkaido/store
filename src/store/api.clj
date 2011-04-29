@@ -238,6 +238,9 @@
          store.api.IWriteBucket
          (bucket-merge [this k v]
                        (bucket-merge (.get mem-bucket) k v))
+	 (bucket-delete [this k]
+	    (bucket-delete mem-bucket k)
+	    (bucket-delete bucket k))
          (bucket-update [this k f]
                         (bucket-update (.get mem-bucket) k f))
          (bucket-sync [this]
