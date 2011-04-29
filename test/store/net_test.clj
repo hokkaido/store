@@ -18,13 +18,15 @@
                   (.stop server))))
 
 (deftest exec-req-test
-  (let [bs {"hm" (hashmap-bucket)
+  (let [bs {"hm" (with-merge 
+		   (hashmap-bucket)
+		   (fn [_ x y] (+ (or x 0) y)))
             "fs" (fs-bucket "/tmp/store-net-test")}]
     (is (= {:body "null"
             :headers {"Content-Type" "application/json; charset=UTF-8"}
             :status 200}
-           (exec-req bs {:name "hm" :op "put"} "k1" "v1")))
-    (is (= {:body "\"v1\""
+           (exec-req bs {:name "hm" :op "put"} "k1" 42)))
+    (is (= {:body "42"
             :headers {"Content-Type" "application/json; charset=UTF-8"}
             :status 200}
            (exec-req bs {:name "hm" :op "get"} "k1")))
@@ -41,7 +43,12 @@
     (is (= {:body "null"
             :headers {"Content-Type" "application/json; charset=UTF-8"}
             :status 200}
-           (exec-req bs {:name "fs" :op "get"} "null-k")))))
+           (exec-req bs {:name "fs" :op "get"} "null-k")))
+
+    ;; Merge
+    (exec-req bs {:name "hm" :op "merge"} "k1" 42)
+    (is (= "84"
+	   (:body (exec-req bs {:name "hm" :op "get"}  "k1"))))))
 
 (deftest rest-bucket-test
   (let [b (rest-bucket :name "b1"

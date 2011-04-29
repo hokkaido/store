@@ -19,23 +19,23 @@
            (java.util.concurrent Executors Future Callable TimeUnit)
            (org.apache.commons.io IOUtils)))
 
+(defn rest-response [status s]
+  {:body (json/generate-string s)
+   :headers {"Content-Type" "application/json; charset=UTF-8"}
+   :status status})
+
 (defn exec-req
   [buckets p & args]
-  (let [mk-response (partial with-ex (logger)
-                      (fn [status s]
-                        {:body (json/generate-string s)
-                         :headers {"Content-Type" "application/json; charset=UTF-8"}
-                         :status status}))
-        bucket (buckets (p :name))
+  (let [bucket (buckets (p :name))        
         bucket-op ((merge read-ops write-ops) (keyword (p :op)))]
     (cond
-     (nil? bucket) (mk-response 500 {:error (str "Don't recognize bucket " (p :name))})
-     (nil? bucket-op) (mk-response 500 {:error (str "Don't recognize op " (p :op))})
+     (nil? bucket) (rest-response 500 {:error (str "Don't recognize bucket " (p :name))})
+     (nil? bucket-op) (rest-response 500 {:error (str "Don't recognize op " (p :op))})
      :else (try
-             (mk-response 200 (apply bucket-op bucket args))
+             (rest-response 200 (apply bucket-op bucket args))
              (catch Exception e
                (.printStackTrace e)
-               (mk-response 500 {:error (str e)}))))))
+               (rest-response 500 {:error (str e)}))))))
 
 (defn rest-bucket-handler [buckets]
   (let [exec-request (partial with-ex (logger) exec-req buckets)]
@@ -84,8 +84,7 @@
 						     :body (.getBytes
 							    (json/generate-string body-arg)
                                                               "UTF8")}))]
-                           (if (= (:status resp)
-                                  200) 
+                           (if (= (:status resp) 200)                                   
                              (-> resp :body json/parse-string)
                              (throw (RuntimeException.
                                      (format "Rest bucket server error: %s"

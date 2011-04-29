@@ -242,10 +242,10 @@
                         (bucket-update (.get mem-bucket) k f))
          (bucket-sync [this]
                       (do-flush!)
-                      (map bucket-sync buckets))
+                      (doseq [b buckets] (bucket-sync b)))
          (bucket-close [this]
                        (do-flush!)
-                       (map bucket-close buckets))))))
+                       (doseq [b buckets] (bucket-close b)))))))
 
 (def read-ops
   {:get bucket-get
