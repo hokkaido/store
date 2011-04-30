@@ -10,6 +10,7 @@
         [ring.util.codec :only [url-decode url-encode]])
   (:require [clojure.string :as str]
             [clj-json.core :as json]
+	    [clojure.contrib.logging :as log]
             [fetcher.core :as client])
   (:import (java.net Socket InetAddress
                      ServerSocket SocketException)
@@ -46,6 +47,7 @@
      :else (try
              (rest-response 200 (p :op) (apply bucket-op bucket args))
              (catch Exception e
+	       (log/info (format "params: %s %s" (pr-str p) (pr-str args)))
                (.printStackTrace e)
                (rest-response 500 nil {:error (str e)}))))))
 
