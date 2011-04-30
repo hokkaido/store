@@ -1,5 +1,6 @@
 (ns store.api
   (:use [plumbing.core :only [?>]]
+	[clojure.java.io :only [file]]
 	store.core
 	store.net
 	store.bdb))
@@ -10,7 +11,7 @@
 	       (apply bdb-db name db-env
 		      (apply concat (merge {:cache-mode :evict-ln}
 					   opts))))
-	:fs (fs-bucket path)
+	:fs (fs-bucket (str (file path name)))
 	:mem (hashmap-bucket)
 	:rest (rest-bucket :host host
 			   :port port
@@ -29,11 +30,17 @@
       (?> merge with-merge merge)
       (?> flush? with-reading-flush)))
 
-(defn build-buckets [spec-map context]
-  (->> spec-map 
-       (map (fn [[name spec]]
-	      [name (bucket name (merge context spec))]))
-       (into {})))
+(defn build-buckets [specs & [context]]
+  (let [specs (if (map? specs)
+		(map #(if (not context)
+			%
+			(merge context %))
+		     specs)
+		(zipmap specs (repeat context)))]
+    (->> specs
+	 (map (fn [[name spec]]
+		[name (bucket name spec)]))
+	 (into {}))))
 
 (defn flush! [buckets spec-map]
   #(doseq [[name spec] spec-map
