@@ -56,42 +56,44 @@
 
 ;;; Simple Buckets
 
-(defn fs-bucket [dir-path]
+(defn fs-bucket
+  ([path name] (fs-bucket (str (file path name))))
+  ([dir-path]
   ;; ensure directory exists
-  (let [f (if (string? dir-path)
-            (file dir-path)
-            dir-path)]
-    (.mkdirs f)
-    (reify
-      IReadBucket
-      (bucket-get [this k]
-                  (let [f (File. f ^String (ring/url-encode k))]
-                    (when (.exists f) (-> f slurp read-string))))
-      (bucket-batch-get [this ks] (default-bucket-batch-get this ks))
-      (bucket-seq [this] (default-bucket-seq this))     
-      (bucket-exists? [this k]		
-                      (let [f (File. f ^String (ring/url-encode k))]
-                        (.exists f)))
-      (bucket-keys [this]
-                   (for [^File c (.listFiles f)
-                         :when (and (.isFile c) (not (.isHidden c)))]
-                     (ring/url-decode (.getName c))))
-      (bucket-modified [this k]
-                       (time.coerce/from-long
-                        (.lastModified (File. dir-path 
-                                              ^String (ring/url-encode k)))))
+      (let [f (if (string? dir-path)
+		(file dir-path)
+		dir-path)]
+	(.mkdirs f)
+	(reify
+	 IReadBucket
+	 (bucket-get [this k]
+		     (let [f (File. f ^String (ring/url-encode k))]
+		       (when (.exists f) (-> f slurp read-string))))
+	 (bucket-batch-get [this ks] (default-bucket-batch-get this ks))
+	 (bucket-seq [this] (default-bucket-seq this))     
+	 (bucket-exists? [this k]		
+			 (let [f (File. f ^String (ring/url-encode k))]
+			   (.exists f)))
+	 (bucket-keys [this]
+		      (for [^File c (.listFiles f)
+			    :when (and (.isFile c) (not (.isHidden c)))]
+			(ring/url-decode (.getName c))))
+	 (bucket-modified [this k]
+			  (time.coerce/from-long
+			   (.lastModified (File. dir-path 
+						 ^String (ring/url-encode k)))))
       
-      IWriteBucket
-      (bucket-put [this k v]
-                  (let [f (File. f ^String(ring/url-encode k))]
-                    (spit f (pr-str v))))
-      (bucket-delete [this k]
-                     (let [f (File. f ^String (ring/url-encode  k))]
-                       (.delete f)))
-      (bucket-update [this k f]
-                     (default-bucket-update this k f))
-      (bucket-sync [this] nil)
-      (bucket-close [this] nil))))
+	 IWriteBucket
+	 (bucket-put [this k v]
+		     (let [f (File. f ^String(ring/url-encode k))]
+		       (spit f (pr-str v))))
+	 (bucket-delete [this k]
+			(let [f (File. f ^String (ring/url-encode  k))]
+			  (.delete f)))
+	 (bucket-update [this k f]
+			(default-bucket-update this k f))
+	 (bucket-sync [this] nil)
+	 (bucket-close [this] nil)))))
 
 (defn hashmap-bucket
   ([]

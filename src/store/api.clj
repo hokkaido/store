@@ -11,7 +11,7 @@
 	       (apply bdb-db name db-env
 		      (apply concat (merge {:cache-mode :evict-ln}
 					   opts))))
-	:fs (fs-bucket (str (file path name)))
+	:fs (fs-bucket path name)
 	:mem (hashmap-bucket)
 	:rest (rest-bucket :host host
 			   :port port
