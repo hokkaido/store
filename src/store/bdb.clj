@@ -238,6 +238,6 @@
                    (default-bucket-update this k f))
     (bucket-sync [this]
                  (when (-> db .getConfig .getDeferredWrite)
-                   (.sync db)))
+                   (str (.sync db))))
     (bucket-close [this]
 		  (str (.close db)))))
