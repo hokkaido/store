@@ -1,5 +1,5 @@
 (ns store.bdb
-  (:use store.api
+  (:use store.core
         [clojure.java.io :only [file copy]]
         [clojure.contrib.shell :only [sh]])
   (:import (com.sleepycat.je Database 

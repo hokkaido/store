@@ -3,7 +3,7 @@
 store.s3
   (:use 
         clj-serializer.core
-	store.api
+	store.core
 	[plumbing.core :only [with-silent]])
   (:require [clojure.contrib.duck-streams :as ds])
   (:import
@@ -173,7 +173,7 @@ store.s3
   "Takes a S3 connection, a bucket name, and an optional map from logical
   bucket name to actual S3 bucket name."
   [s3 bucket-name]
-  (reify store.api.IReadBucket
+  (reify store.core.IReadBucket
          (bucket-keys [this]
                       (get-keys s3 bucket-name))
          (bucket-get [this k]
@@ -185,7 +185,7 @@ store.s3
 
 	 (bucket-seq [this] (default-bucket-seq this))	 
 	 
-	 store.api.IWriteBucket
+	 store.core.IWriteBucket
 	 (bucket-put [this k v]
                      (put-clj s3 bucket-name (str k) v))
 	 

@@ -1,5 +1,5 @@
 (ns store.net
-  (:use store.api
+  (:use store.core
         [clojure.java.io :only [file copy]]
         [clojure.contrib.shell :only [sh]]
         [plumbing.core :only [with-timeout
@@ -57,13 +57,6 @@
                          (url-decode (p :key))
                          (json/parse-string (IOUtils/toString ^java.io.InputStream b "UTF8"))))]))
 
-(defn start-rest-bucket-server [buckets & {:keys [port,join?]
-                                           :or {port 4445 join? false}
-                                           :as jetty-opts}]
-  (run-jetty (apply routes
-                    (rest-bucket-handler buckets))
-             jetty-opts))
-
 (defn rest-bucket [& {:keys [name,host,port,keywordize-map?]
                       :or {host "localhost"
                            port 4445
@@ -94,7 +87,7 @@
                         (fn [k]
                           (-> k url-encode (.replaceAll "\\." "%2e"))))]
     (reify 
-      store.api.IReadBucket
+      store.core.IReadBucket
       (bucket-get [this k] (exec-request ["get" (my-url-encode k)]))
       (bucket-seq [this] (exec-request ["seq"]))
       (bucket-exists? [this k] (exec-request [(my-url-encode "exists?") (my-url-encode k)]))
@@ -102,10 +95,17 @@
       (bucket-batch-get [this ks] (exec-request ["batch-get"] ks))
       (bucket-modified [this k] (exec-request ["modified" (my-url-encode k)]))
 
-      store.api.IWriteBucket
+      store.core.IWriteBucket
       (bucket-put [this k v] (exec-request ["put" (my-url-encode k)] v))
       (bucket-delete [this k] (exec-request ["delete" (my-url-encode k)]))
       (bucket-update [this k f] (default-bucket-update this k f))
       (bucket-merge [this k v] (exec-request ["merge" (my-url-encode k)] v))
       (bucket-close [this] (exec-request ["close"]))
       (bucket-sync [this] (exec-request ["sync"])))))
+
+(defn start-rest-bucket-server [buckets & {:keys [port,join?]
+                                           :or {port 4445 join? false}
+                                           :as jetty-opts}]
+  (run-jetty (apply routes
+                    (rest-bucket-handler buckets))
+             jetty-opts))

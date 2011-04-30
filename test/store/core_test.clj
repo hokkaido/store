@@ -2,6 +2,7 @@
   (:require [clj-time.core :as time])
   (:use clojure.test
         store.api
+	store.core
         store.riak
         [plumbing.core :only [find-first map-from-keys]]))
 
@@ -165,27 +166,3 @@
     (is (= (bucket-get mb "k1") "v1"))
     (is (= (bucket-get b1 "k1") "v1"))
     (is (= (bucket-get b2 "k1") "v1"))))
-
-(deftest with-layers-test
-  (let [top (hashmap-bucket)
-        mid (hashmap-bucket)
-        bot (hashmap-bucket)
-        lb (with-layers [top mid bot])]
-    (bucket-put top "k1" "vt")
-    (bucket-put mid "k1" "vm")
-    (bucket-put bot "k1" "vb")
-    (is (= "vt" (bucket-get lb "k1")))
-
-    (bucket-put mid "k2" "vvm")
-    (bucket-put bot "k2" "vvb")
-    (is (= "vvm" (bucket-get lb "k2")))
-
-    (bucket-put bot "k3" "vvvb")
-    (is (= "vvvb" (bucket-get lb "k3")))
-
-    (is (= nil (bucket-get lb "dne")))
-
-    (is (bucket-exists? lb "k1"))
-    (is (bucket-exists? lb "k2"))
-    (is (bucket-exists? lb "k3"))
-    (is (not (bucket-exists? lb "dne")))))

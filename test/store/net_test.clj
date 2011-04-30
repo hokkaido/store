@@ -1,6 +1,7 @@
 (ns store.net-test
   (:use clojure.test
         store.api
+	store.core
         store.net
         [store.core-test :only [generic-bucket-test]]
         [plumbing.core :only [find-first]]

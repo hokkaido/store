@@ -1,5 +1,5 @@
 (ns store.redis
-  (:use store.api
+  (:use store.core
 	[plumbing.core :only [-->> with-ex with-retries]])
   (:import [redis.clients.jedis JedisPool Jedis]))
            
@@ -33,7 +33,7 @@
     {:keys [host,port,timeout,pool-timeout,retry-count,num-clients]
      :as spec}]
      (let [jedis-pool (atom nil)]
-       (reify store.api.IReadBucket
+       (reify store.core.IReadBucket
               (bucket-get [this k]
                           (ensure-jedis-pool jedis-pool host port timeout num-clients)	  
                           (with-jedis-client @jedis-pool  pool-timeout retry-count
@@ -57,7 +57,7 @@
                               #_(with-jedis-client @jedis-pool pool-timeout retry-count
                                   (fn [^Jedis c] (.exists c (mk-key bucket k)))))
 
-	      store.api.IWriteBucket
+	      store.core.IWriteBucket
 
 	      (bucket-put [this k v]
                           (ensure-jedis-pool jedis-pool host port timeout num-clients)	  

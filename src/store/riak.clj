@@ -4,8 +4,8 @@
             [clojure.string :as str]
             [clj-json.core :as json]
             [clj-time.coerce :as time-coerce])
-  (:use store.api
-        plumbing.core
+  (:use store.core
+       plumbing.core
         plumbing.error
         plumbing.streams)
   (:require [clojure.contrib.logging :as log])
@@ -86,7 +86,7 @@
   (let [exec (partial with-ex observer
 		exec-riak-req get-client riak-opts)] 	       
    (reify
-    store.api.IReadBucket   
+    store.core.IReadBucket   
     (bucket-get [this k]    
 		(let [res (exec [k] :get nil (comp json/parse-string :body))]
 		  (if keywordize?
@@ -107,7 +107,7 @@
      [this k]
      (exec [k] :head nil last-modified))
    
-    store.api.IWriteBucket
+    store.core.IWriteBucket
     (bucket-put
      [this k v]
      (exec [k] :post (get-riak-json-body v) identity))  

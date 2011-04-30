@@ -3,7 +3,7 @@
 	clojure.java.shell
         clojure.test
         store.riak
-        store.api
+        store.core
 	plumbing.core
 	plumbing.error
         [clj-time.coerce :only [to-date]]

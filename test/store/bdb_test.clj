@@ -1,6 +1,7 @@
 (ns store.bdb-test
   (:use clojure.test
 	store.api
+	store.core
 	store.bdb
 	[store.core-test :only [generic-bucket-test]]
 	[clojure.contrib.io :only [delete-file make-parents delete-file-recursively]]
