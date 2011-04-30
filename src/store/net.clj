@@ -135,21 +135,3 @@
       (bucket-merge [this k v] (exec ["merge" k] v))
       (bucket-close [this] (exec ["close"]))
       (bucket-sync [this] (exec ["sync"])))))
-
-(comment
-  (use 'store.riak)
-  (def hm (hashmap-bucket))
-  (def b (riak-bucket
-	    :server "http://ec2-50-16-151-129.compute-1.amazonaws.com"
-	    :port 8098
-	    :name "twitter-access-token"))
-  (def b2 (rest-bucket
-	    :host "ec2-50-16-182-92.compute-1.amazonaws.com"
-	    :port 4445
-	    :name "twitter-access-token"))
-  (def ss (bucket-seq b))
-  ss
-  (bucket-seq b2)
-  (doseq [[k v] ss :when v]
-    (bucket-put b2 k v))
-)
