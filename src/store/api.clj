@@ -1,11 +1,11 @@
 (ns store.api
-  (:use [plumbing.core :only [?>]]
+  (:use [plumbing.core :only [?> ?>>]]
 	[clojure.java.io :only [file]]
 	store.core
 	store.net
 	store.bdb))
 
-(defn raw-bucket [name {:keys [type db-env host port path] :as opts}]
+(defn raw-bucket [{:keys [name type db-env host port path] :as opts}]
   (case type
 	:bdb  (bdb-bucket
 	       (apply bdb-db name db-env
@@ -25,23 +25,27 @@
      (with-flush b)))
 
 (defn bucket
-  [name {:keys [type,merge,flush?] :as spec}]
-  (-> (raw-bucket name spec)
-      (?> merge with-merge merge)
-      (?> flush? with-reading-flush)))
+  [{:keys [merge,flush?] :as spec}]
+  (assoc spec
+    :bucket
+    (->> (raw-bucket spec)
+	 (?>>
+	  merge with-merge merge)
+	 (?>> flush? with-reading-flush))))
 
-(defn build-buckets [specs & [context]]
-  (let [specs (if (map? specs)
-		(map #(if (not context)
-			%
-			(merge context %))
-		     specs)
-		(zipmap specs (repeat context)))]
-    (->> specs
-	 (map (fn [[name spec]]
-		[name (bucket name spec)]))
-	 (into {}))))
+(defn to-kv [k v m]
+  [(m k) (m v)])
 
+(defn buckets [specs & [context]]
+  (->> specs
+       (map #(->> %
+		  (?>> (string? %) hash-map :name)
+		  (?>> context merge context)
+		  bucket
+		  (to-kv :name :bucket)))
+       (into {})))
+
+;;TODO: change to each bucket scheduling it's own flushing on a seperate thread.
 (defn flush! [buckets spec-map]
   #(doseq [[name spec] spec-map
 	   :when (:flush? spec)
