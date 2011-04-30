@@ -42,8 +42,8 @@
 (defn bdb-get [^Database db k]
   (let [entry-key (to-entry k)
         entry-val (DatabaseEntry.)]
-    (if (= (.get db nil entry-key entry-val LockMode/DEFAULT)
-           OperationStatus/SUCCESS)
+    (when (= (.get db nil entry-key entry-val LockMode/DEFAULT)
+	     OperationStatus/SUCCESS)
       (from-entry entry-val))))
 
 (defn cursor-next
@@ -231,12 +231,13 @@
     IWriteBucket
 
     (bucket-put [this k v]
-                (bdb-put db k v))
+                (str (bdb-put db k v)))
     (bucket-delete [this k]
-                   (bdb-delete db k))
+                (str (bdb-delete db k)))
     (bucket-update [this k f]
                    (default-bucket-update this k f))
     (bucket-sync [this]
                  (when (-> db .getConfig .getDeferredWrite)
-                   (.sync db)))
-    (bucket-close [this] (.close db))))
+                   (str (.sync db))))
+    (bucket-close [this]
+		  (str (.close db)))))
