@@ -87,10 +87,10 @@
 (defn process-client-response [op {:keys [status,body] :as resp}]
   (if (= status 200)                                   
     (if (#{"keys" "seq"} op)
-      (json/parsed-seq
-        (-> ^java.io.InputStream body
-	    java.io.InputStreamReader.
-	    java.io.BufferedReader.))
+      (-> ^java.io.InputStream body
+	  java.io.InputStreamReader.
+	  java.io.BufferedReader.
+	  json/parsed-seq)
       (json/parse-string body))
     (throw (RuntimeException.
 	    (format "Rest bucket server error: %s"
@@ -135,3 +135,4 @@
       (bucket-merge [this k v] (exec ["merge" k] v))
       (bucket-close [this] (exec ["close"]))
       (bucket-sync [this] (exec ["sync"])))))
+
