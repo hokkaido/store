@@ -1,4 +1,4 @@
-(defproject store "0.2.2-SNAPSHOT"
+(defproject store "0.2.3-SNAPSHOT"
   :description "Distributed Datastorage Abstraction"
   :dependencies [[org.clojure/clojure "1.2.0"]
                  [org.clojure/clojure-contrib "1.2.0"]
