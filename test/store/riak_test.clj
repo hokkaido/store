@@ -4,6 +4,7 @@
         clojure.test
         store.riak
         store.core
+	store.api
 	plumbing.core
 	plumbing.error
         [clj-time.coerce :only [to-date]]
@@ -26,27 +27,16 @@
 
 (deftest 
   riak-store-test
-  (let [errs (atom nil)
-	get-bucket #(riak-bucket
-		       :name %
-		       :observer
-		         (fn [e & rest]
-			   (apply (logger) e rest)
-			   (swap! errs conj e)
-			   nil))
-	s (mk-store (map-from-keys get-bucket
-		       ["b1","b2","b3"]))
-        f (partial s :get)
+  (let [s (store ["b1","b2","b3"] {:type :riak})
 	b (riak-bucket :name "b-key" :keywordize? true)]
     (bucket-put b "k" {:a 1})
     (is (= {:a 1} (bucket-get b "k")))
     (s :put "b1" "k" "v1")
     (is (nil? (s :get "b1" "not-found")))
-    (is (= 1 (count @errs)))
-    (is (= (f "b1" "k") "v1"))
+    (is (= (s :get "b1" "k") "v1"))
     ;; test url encode
     (s :put "b1" "http://url.com" "v2")    
-    (is (= (f "b1" "http://url.com")))
+    (is (= (s :get "b1" "http://url.com")))
     (is (= (into #{} ["k" "http://url.com"])
 	   (into #{} (s :keys "b1"))))
     (s :delete "b1" "k")

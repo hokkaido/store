@@ -22,11 +22,10 @@
   (bucket-update b "k2" inc)
   (is (= (bucket-get b "k2") 3)))
 
-(defn generic-store-test [mk-store]
-  (let [s (mk-store ["b1","b2","b3"])
-        f (partial s :get)]
+(defn generic-store-test [store]
+  (let [s (store ["b1","b2","b3"])]
     (s :put "b1" "k" "v")
-    (is (= (f "b1" "k") "v"))
+    (is (= (s :get "b1" "k") "v"))
     (is (= ["k"] (s :keys "b1")))
     (s :delete "b1" "k")
     (is (empty? (s :keys "b1")))
@@ -42,21 +41,11 @@
 
 (deftest hashmap-store-test
   (generic-store-test (fn [names]
-			(mk-store (map-from-keys (fn [& _] (hashmap-bucket)) names))))
-  (let [s (mk-store {"b1" (hashmap-bucket)})]
+			(store names {:type :mem})))
+  (let [s (store ["b1"] {:type :mem})]
     (s :put "b1" "k" "v")    
     (is (= ["k"] (s :keys "b1")))
     (is (= "v" (s :get "b1" "k")))))
-
-(deftest asymetric-read-write
-  (let [reader (hashmap-bucket)
-	writer (hashmap-bucket)
-	store (mk-store {"a" reader} {"a" writer})]
-    (store :put "a" "k" "v")
-    (is (= nil (store :get "a" "k")))
-    (is (= "v" (bucket-get writer "k")))
-    (bucket-put reader "k1" "v1")
-    (is (= "v1" (store :get "a" "k1")))))
 
 (deftest fs-bucket-test
   (generic-bucket-test
@@ -80,29 +69,17 @@
 
 (deftest fs-store-test
   (let [root (java.io.File. ".")
-        s (-> (mk-store {"fs" (fs-bucket (.getAbsolutePath root))}))]
+        s (-> (store ["fs"] {:type :fs
+			     :path (.getAbsolutePath root)}))]
     (s :put "fs" "my-key" 2)
-    (is (.exists (java.io.File. root "my-key"))))
+    (is (.exists (java.io.File. root "fs/my-key"))))
 
   (let [root (java.io.File. ".")
-        s (-> (mk-store {"fs" (fs-bucket root)}))]
+        s (-> (store ["fs"] {:type :fs
+			     :path root}))]
     (is (= (s :get "fs" "my-key") 2))
     (s :delete "fs" "my-key")
     (is (not (.exists (java.io.File. root "my-key"))))))
-
-;; (deftest ^{:system true :redis true}
-;;   redis-bucket-test
-;;   (generic-bucket-test (redis-bucket "b" default-redis-config)))
-
-;; (deftest ^{:system true :redis true}
-;;   redis-store-test
-;;   (generic-store-test (fn [names]
-;; 			(map-from-keys redis-bucket names)))
-;;   (let [s (mk-store
-;; 	   (map-from-keys redis-bucket ["b1" "b2"]))]
-;;     (s :put "b1" "k" "v")
-;;     (is (= "v" (s :get "b1" "
-
 
 (deftest flush-test
   (let [b1 (hashmap-bucket)

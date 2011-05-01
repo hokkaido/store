@@ -3,6 +3,7 @@
 	[clojure.java.io :only [file]]
 	store.core
 	store.net
+	store.riak
 	store.bdb))
 
 (defn raw-bucket [{:keys [name type db-env host port path] :as opts}]
@@ -13,9 +14,8 @@
 					   opts))))
 	:fs (fs-bucket path name)
 	:mem (hashmap-bucket)
-	:rest (rest-bucket :host host
-			   :port port
-			   :name name)
+	:rest (apply rest-bucket (apply concat opts))
+	:riak (apply riak-bucket (apply concat opts)) 
 	(throw (java.lang.Exception.
 		(format "bucket type %s does not exist." type)))))
 
@@ -38,21 +38,48 @@
      context
      (context (:id spec)))))
 
-(defn to-kv [k v m]
-  [(m k) (m v)])
+(defn to-kv [k m]
+  [(m k) m])
+
+(defn create-buckets [{:keys [read write] :as spec}]
+  (let [r (if read
+	    (bucket (merge spec read))
+	    (bucket spec))
+	w (if write
+	    (bucket (merge spec write))
+	    r)]
+    (assoc spec :read r :write w)))
 
 (defn buckets [specs & [context]]
   (->> specs
        (map #(->> %
 		  (?>> (string? %) hash-map :name)
 		  (add-context context)
-		  ((fn [m] (assoc m :bucket (bucket m))))
-		  (to-kv :name :bucket)))
+		  create-buckets
+		  (to-kv :name)))
        (into {})))
 
-;;TODO: change to each bucket scheduling it's own flushing on a seperate thread.
-(defn flush! [buckets spec-map]
-  #(doseq [[name spec] spec-map
-	   :when (:flush? spec)
-	   :let [b (buckets name)]]
-     (bucket-sync b)))
+(defn store-op [bucket-map name op & args]
+  (let [b (if (find read-ops op)
+	    (-> name bucket-map :read)
+	    (-> name bucket-map :write))        
+	f (or (read-ops op) (write-ops op))]
+    (apply f b args)))
+
+(deftype Store [bucket-map]
+  clojure.lang.IFn
+  (invoke [this op bucket-name]
+	  (store-op bucket-map bucket-name op))
+  (invoke [this op bucket-name key]
+	  (store-op bucket-map bucket-name op key))
+  (invoke [this op bucket-name key val]
+	  (store-op bucket-map bucket-name op key val))
+  (applyTo [this args] (apply store-op args)))
+
+(defn shutdown [^Store store]
+  (doseq [[name spec] (.bucket-map store)]
+    (bucket-close (:read spec))
+    (bucket-close (:write spec))))
+
+(defn store [bucket-specs & [context]]
+  (store.api.Store. (buckets bucket-specs context)))

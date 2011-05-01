@@ -261,6 +261,13 @@
       (bucket-batch-get [this ks] (default-bucket-batch-get this ks)))     
      b)))
 
+(defn flush! [buckets spec-map]
+  #(doseq [[name spec] spec-map
+	   :when (:flush? spec)
+	   :let [b (buckets name)]]
+     (bucket-sync b)))
+
+
 (def read-ops
   {:get bucket-get
    :batch-get bucket-batch-get
@@ -284,41 +291,3 @@
    :update bucket-update
    :sync bucket-sync
    :close bucket-close})
-
-(defn bucket-op [ops get-bucket]
-  (fn [op bucket-name & args]
-    (let [bucket (get-bucket bucket-name op)
-          bucket-op (ops op)]
-      (when (nil? bucket)
-        (throw (RuntimeException.
-                (format "Bucket doesn't exist: %s" bucket-name))))
-      (apply bucket-op bucket args))))
-
-(defn mk-store 
-  "Make a store. The store must come with a bucket-map
-   containing string keys to bucket implementation values. You
-   can mix bucket implementations across bucket keys.
-
-   Store supports the following operations
-     (s :get \"bucket\" \"key\") return key in bucket
-     (s :seq \"bucket\") return seq of [key val] elems in store.
-     (s :exists? \"bucket\" \"key\")
-     (s :delete \"bucket\" \"key\") delete [k v] in bucket
-     (s :keys \"bucket\") returns seq of keys for bucket
-     (s :bucket \"bucket\") returns bucket impl
-     (s :get-ensure \"bucket\" \"key\" get-fn)
-     (s :merge \"bucket\" \"key\" \"partial-val\")
-  The first 6  ops correspond to bucket-{get,seq,get,exists?,delete,keys} respectively
-  on the specific bucket"    
-  ([bucket-map]
-     (bucket-op
-      (merge read-ops write-ops)
-      (fn [bucket op]
-        (bucket-map bucket))))
-  ([reads writes]
-     (bucket-op
-      (merge read-ops write-ops)
-      (fn [bucket op]
-        (if (find read-ops op)
-          (reads bucket)
-          (writes bucket))))))

@@ -4,26 +4,26 @@
 	store.core))
 
 (deftest build-memory-buckets
-  (let [bs (buckets ["foo"
-		     {:name "bar"}]
+  (let [s (store [{:name "foo"}]
 		    {:type :mem})]
-    (is (= ["foo" "bar"] (keys bs)))
-    (bucket-put (bs "foo") :a 1)
-    (= 1 (bucket-get (bs "foo") :a))))
+    (s :put "foo" :a 1)
+    (= 1 (s :get "foo" :a))))
 
 (deftest bucket-test
-  (let [b (bucket {:name "foo"
-		   :type :mem
-		   :merge (fn [_ x y] (+ (or x 0) (or y 0)))})]
-    (bucket-merge b :a 2)
-    (is (= 2 (bucket-get b :a)))))
+  (let [s (store [{:name "foo"
+		    :type :mem
+		    :merge (fn [_ x y] (+ (or x 0) (or y 0)))}])]
+    (s :merge "foo" :a 2)
+    (is (= 2 (s :get "foo" :a)))))
 
 (deftest build-merge-buckets
-  (let [bs (buckets [{:name "foo"
-		      :merge (fn [_ x y] (+ (or x 0) (or y 0)))}
-		     "bar"]
-		    {:type :mem})]
-    (is (= ["foo" "bar"] (keys bs)))
-    (bucket-merge (bs "foo") :a 1)
-    (bucket-merge (bs "foo") :a 4)
-    (= 5 (bucket-get (bs "foo") :a))))
+  (let [s (store [{:name "foo"
+		   :merge (fn [_ x y] (+ (or x 0) (or y 0)))}]
+		 {:type :mem})]
+    (s :merge "foo" :a 1)
+    (s :merge "foo" :a 4)
+    (= 5 (s :get "foo" :a))))
+
+(deftest store-op-test
+  (is (= 42 (store-op {:k {:read {:k 42}}}
+		      :k :get :k))))
