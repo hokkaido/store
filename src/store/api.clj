@@ -26,12 +26,9 @@
 
 (defn bucket
   [{:keys [merge,flush?] :as spec}]
-  (assoc spec
-    :bucket
-    (->> (raw-bucket spec)
-	 (?>>
-	  merge with-merge merge)
-	 (?>> flush? with-reading-flush))))
+  (-> (raw-bucket spec)
+      (?> merge with-merge merge)
+      (?> flush? with-reading-flush)))
 
 (defn add-context [context spec]
   (if (not context)
@@ -49,7 +46,7 @@
        (map #(->> %
 		  (?>> (string? %) hash-map :name)
 		  (add-context context)
-		  bucket
+		  ((fn [m] (assoc m :bucket (bucket m))))
 		  (to-kv :name :bucket)))
        (into {})))
 
