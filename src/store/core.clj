@@ -267,7 +267,6 @@
 	   :let [b (buckets name)]]
      (bucket-sync b)))
 
-
 (def read-ops
   {:get bucket-get
    :batch-get bucket-batch-get
@@ -291,3 +290,10 @@
    :update bucket-update
    :sync bucket-sync
    :close bucket-close})
+
+(defn store-op [bucket-map op name & args]
+  (let [b (if (find read-ops op)
+	    (-> name bucket-map :read)
+	    (-> name bucket-map :write))        
+	f (or (read-ops op) (write-ops op))]
+    (apply f b args)))

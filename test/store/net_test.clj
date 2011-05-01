@@ -12,52 +12,48 @@
 
 (use-fixtures :each
               (fn [f]
-                (let [handlers (rest-bucket-handler
-                              {"b1" (hashmap-bucket)
-                               "b2" (hashmap-bucket)})
+                (let [handlers (rest-store-handler
+				(store ["b1" "b2"]))
 		      server (run-jetty
-			        (apply routes handlers)
-				{:port 4445
-				 :join? false})]
+			      (apply routes handlers)
+			      {:port 4445
+			       :join? false})]
                   (f)
                   (.stop server))))
 
 (deftest exec-req-test
-  (let [bs {"hm" (with-merge 
-		   (hashmap-bucket)
-		   (fn [_ x y] (+ (or x 0) y)))
-            "fs" (fs-bucket "/tmp/store-net-test")}]
+  (let [s (store [{:name "hm"
+		   :merge (fn [_ x y] (+ (or x 0) y))}
+		  {:name "fs"
+		   :type :fs
+		   :path "/tmp/store-net-test"}])]
     (is (= {:body "null"
             :headers {"Content-Type" "application/json; charset=UTF-8"}
             :status 200}
-           (exec-request bs {:name "hm" :op "put"} "k1" 42)))
+           (exec-request s {:name "hm" :op "put"} "k1" 42)))
     (is (= {:body "42"
             :headers {"Content-Type" "application/json; charset=UTF-8"}
             :status 200}
-           (exec-request bs {:name "hm" :op "get"} "k1")))
+           (exec-request s {:name "hm" :op "get"} "k1")))
 
-    (exec-request bs {:name "hm" :op "put"} "k2" 42)
+    (exec-request s {:name "hm" :op "put"} "k2" 42)
     (is (= #{"k1" "k2"}
-	   (into #{} (map json/parse-string (:body (exec-request bs {:name "hm" :op "keys"}))))))
+	   (into #{} (map json/parse-string (:body (exec-request s {:name "hm" :op "keys"}))))))
 
     ;; NPE since hashmaps don't support nil vals
-    (is (= {:body "{\"error\":\"java.lang.NullPointerException\"}"
-            :headers {"Content-Type" "application/json; charset=UTF-8"}
-            :status 500}
-           (exec-request bs {:name "hm" :op "put"} "null-k" nil)))
     (is (= {:body "null"
             :headers {"Content-Type" "application/json; charset=UTF-8"}
             :status 200}
-           (exec-request bs {:name "fs" :op "put"} "null-k" nil)))
+           (exec-request s {:name "fs" :op "put"} "null-k" nil)))
     (is (= {:body "null"
             :headers {"Content-Type" "application/json; charset=UTF-8"}
             :status 200}
-           (exec-request bs {:name "fs" :op "get"} "null-k")))
+           (exec-request s {:name "fs" :op "get"} "null-k")))
 
     ;; Merge
-    (exec-request bs {:name "hm" :op "merge"} "k1" 42)
+    (exec-request s {:name "hm" :op "merge"} "k1" 42)
     (is (= "84"
-	   (:body (exec-request bs {:name "hm" :op "get"}  "k1"))))))
+	   (:body (exec-request s {:name "hm" :op "get"}  "k1"))))))
 
 (deftest rest-bucket-test
   (let [b (rest-bucket :name "b1"

@@ -37,46 +37,33 @@
      :body (rest-response-body op data)))
 
 (defn exec-request
-  [buckets p & args]
-  (let [bucket (buckets (p :name))        
-        bucket-op ((merge read-ops write-ops) (keyword (p :op)))]
-    (cond
-     (nil? bucket)
-       (rest-response 500 nil {:error (str "Don't recognize bucket " (p :name))})
-     (nil? bucket-op)
-       (rest-response 500 nil {:error (str "Don't recognize op " (p :op))})
-     :else (try
-             (rest-response 200 (p :op) (apply bucket-op bucket args))
-             (catch Exception e
-	       (log/info (format "params: %s %s" (pr-str p) (pr-str args)))
-               (.printStackTrace e)
-               (rest-response 500 nil {:error (str e)}))))))
+  [s p & args]
+  (try
+    (rest-response 200 (p :op)
+		   (apply s (keyword (p :op)) (p :name) args))
+    (catch Exception e
+      (log/info (format "params: %s %s" (pr-str p) (pr-str args)))
+      (.printStackTrace e)
+      (rest-response 500 nil {:error (str e)}))))
 
-(defn rest-bucket-handler [buckets]
-  (let [exec-req (partial with-ex (logger) exec-request buckets)]
+(defn rest-store-handler [s]
+  (let [exec-req (partial with-ex (logger) exec-request s)]
     [ ;; seq, keys, sync, close    
-     (GET "/store/:op/:name" {p :params} (exec-req p))
+     (GET "/store/:op/:name" {p :params}
+	  (exec-req p))
      ;; batch-get
      (POST "/store/:op/:name" {p :params b :body}
            (exec-req 
-               (keywordize-map p)
-	       (parse-body b)))
+	    p (parse-body b)))
      ;; get, modified, exists
      (GET "/store/:op/:name/:key"  {p :params}
-	   (exec-req  p (url-decode (p :key))))
+	  (exec-req p (url-decode (p :key))))
      ;; put, merge
      (POST "/store/:op/:name/:key" {p :params b :body}
            (exec-req 
-              (keywordize-map p)
-	      (url-decode (p :key))
-	      (parse-body b)))]))
-
-(defn start-rest-bucket-server [buckets & {:keys [port,join?]
-                                           :or {port 4445 join? false}
-                                           :as jetty-opts}]
-  (run-jetty (apply routes
-                    (rest-bucket-handler buckets))
-             jetty-opts))
+	    p
+	    (url-decode (p :key))
+	    (parse-body b)))]))
 
 ;; url (str base (str/join "/" (concat [op name] as)))
 (defn exec-client-request [op url & [body-arg]]

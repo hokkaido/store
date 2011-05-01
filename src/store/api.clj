@@ -61,13 +61,6 @@
 		  (to-kv :name)))
        (into {})))
 
-(defn store-op [bucket-map op name & args]
-  (let [b (if (find read-ops op)
-	    (-> name bucket-map :read)
-	    (-> name bucket-map :write))        
-	f (or (read-ops op) (write-ops op))]
-    (apply f b args)))
-
 (deftype Store [bucket-map]
   clojure.lang.IFn
   (invoke [this op bucket-name]
