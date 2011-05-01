@@ -37,8 +37,8 @@
   (if (not context)
     spec
     (merge
-     context
      spec
+     context
      (context (:id spec)))))
 
 (defn to-kv [k v m]
