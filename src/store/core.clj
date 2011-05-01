@@ -248,6 +248,19 @@
                        (do-flush!)
                        (map bucket-close buckets))))))
 
+(defn caching-bucket [f merge-fn]
+  (let [b (with-merge (hashmap-bucket) merge-fn)]
+    (compose-buckets
+     (reify
+      store.core.IReadBucket
+      (bucket-get [this k]
+		  (or (bucket-get b k)	    
+		      (do 
+			(bucket-merge b k (f k))
+			(bucket-get b k))))
+      (bucket-batch-get [this ks] (default-bucket-batch-get this ks)))     
+     b)))
+
 (def read-ops
   {:get bucket-get
    :batch-get bucket-batch-get
