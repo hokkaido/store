@@ -6,7 +6,9 @@
 	store.riak
 	store.bdb))
 
-(defn raw-bucket [{:keys [name type db-env host port path] :as opts}]
+(defn raw-bucket [{:keys [name type db-env host port path]
+		   :or {type :mem}
+		   :as opts}]
   (case type
 	:bdb  (bdb-bucket
 	       (apply bdb-db name db-env
@@ -59,7 +61,7 @@
 		  (to-kv :name)))
        (into {})))
 
-(defn store-op [bucket-map name op & args]
+(defn store-op [bucket-map op name & args]
   (let [b (if (find read-ops op)
 	    (-> name bucket-map :read)
 	    (-> name bucket-map :write))        
@@ -69,12 +71,13 @@
 (deftype Store [bucket-map]
   clojure.lang.IFn
   (invoke [this op bucket-name]
-	  (store-op bucket-map bucket-name op))
+	  (store-op bucket-map op bucket-name))
   (invoke [this op bucket-name key]
-	  (store-op bucket-map bucket-name op key))
+	  (store-op bucket-map op bucket-name key))
   (invoke [this op bucket-name key val]
-	  (store-op bucket-map bucket-name op key val))
-  (applyTo [this args] (apply store-op args)))
+	  (store-op bucket-map  op bucket-name key val))
+  (applyTo [this args]
+	   (apply store-op bucket-map args)))
 
 (defn shutdown [^Store store]
   (doseq [[name spec] (.bucket-map store)]

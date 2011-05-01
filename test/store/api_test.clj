@@ -26,4 +26,4 @@
 
 (deftest store-op-test
   (is (= 42 (store-op {:k {:read {:k 42}}}
-		      :k :get :k))))
+		      :get :k :k))))

@@ -102,7 +102,7 @@
       (json/parse-string body))
     (throw (RuntimeException.
 	    (format "Rest bucket server error: %s"
-		    (:body resp))))))
+		    resp)))))
 
 (defn correct-url-encode [k]
   (-> k url-encode (.replaceAll "\\." "%2e")))

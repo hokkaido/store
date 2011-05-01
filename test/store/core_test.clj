@@ -23,9 +23,11 @@
   (is (= (bucket-get b "k2") 3)))
 
 (defn generic-store-test [store]
-  (let [s (store ["b1","b2","b3"])]
+  (let [s (store ["b1","b2","b3"])
+	p (partial s :get)]
     (s :put "b1" "k" "v")
     (is (= (s :get "b1" "k") "v"))
+    (is (= (p "b1" "k") "v"))
     (is (= ["k"] (s :keys "b1")))
     (s :delete "b1" "k")
     (is (empty? (s :keys "b1")))
