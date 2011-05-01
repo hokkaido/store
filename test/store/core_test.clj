@@ -156,6 +156,17 @@
          "v1" (bucket-get b2 "k1")
          "v2" (bucket-get b2 "k2"))))
 
+(deftest caching-bucket-test
+  (let [b {:a [1 2] :b [3 4]}
+	caching (caching-bucket
+		   b
+		   (fn [_ sum vals]
+		     (+ (or sum 0) (reduce + vals))))]
+    (is (= 3 (bucket-get caching :a)))
+    (is (= 7 (bucket-get caching :b)))
+    (bucket-merge caching :a [3 4])
+    (is (= 10 (bucket-get caching :a)))))
+
 (deftest add-listeners-test
   (let [b  (hashmap-bucket)
 	b1 (hashmap-bucket)
