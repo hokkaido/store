@@ -33,6 +33,14 @@
 	  merge with-merge merge)
 	 (?>> flush? with-reading-flush))))
 
+(defn add-context [context spec]
+  (if (not context)
+    spec
+    (merge
+     context
+     spec
+     (context (:id spec)))))
+
 (defn to-kv [k v m]
   [(m k) (m v)])
 
@@ -40,7 +48,7 @@
   (->> specs
        (map #(->> %
 		  (?>> (string? %) hash-map :name)
-		  (?>> context merge context)
+		  (add-context context)
 		  bucket
 		  (to-kv :name :bucket)))
        (into {})))
