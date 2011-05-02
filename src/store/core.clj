@@ -261,12 +261,6 @@
       (bucket-batch-get [this ks] (default-bucket-batch-get this ks)))     
      b)))
 
-(defn flush! [buckets spec-map]
-  #(doseq [[name spec] spec-map
-	   :when (:flush? spec)
-	   :let [b (buckets name)]]
-     (bucket-sync b)))
-
 (def read-ops
   {:get bucket-get
    :batch-get bucket-batch-get

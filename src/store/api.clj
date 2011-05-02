@@ -77,5 +77,10 @@
     (bucket-close (:read spec))
     (bucket-close (:write spec))))
 
+(defn flush! [^Store store]
+  (doseq [[_ spec] (.bucket-map store)
+	  :when (:flush? spec)]
+    (bucket-sync (:write spec))))
+
 (defn store [bucket-specs & [context]]
   (store.api.Store. (buckets bucket-specs context)))
