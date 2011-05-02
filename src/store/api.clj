@@ -1,10 +1,12 @@
 (ns store.api
-  (:use [plumbing.core :only [?> ?>>]]
+  (:use [plumbing.core :only [?> ?>> map-from-vals map-map]]
 	[clojure.java.io :only [file]]
+	[plumbing.error :only [with-ex logger]]
 	store.core
 	store.net
 	store.riak
-	store.bdb))
+	store.bdb)
+  (:import [java.util.concurrent Executors TimeUnit]))
 
 (defn raw-bucket [{:keys [name type db-env host port path]
 		   :or {type :mem}
@@ -21,27 +23,21 @@
 	(throw (java.lang.Exception.
 		(format "bucket type %s does not exist." type)))))
 
-(defn with-reading-flush [b]
-  (compose-buckets
-     b
-     (with-flush b)))
+(defn with-reading-flush [b flushes]
+  (compose-buckets b (with-flush flushes)))
 
 (defn bucket
   [{:keys [merge,flush?] :as spec}]
   (-> (raw-bucket spec)
-      (?> merge with-merge merge)
-      (?> flush? with-reading-flush)))
+      (?> merge with-merge merge)))
 
 (defn add-context [context spec]
-  (if (not context)
+  (if-not context
     spec
     (merge
      spec
      context
      (context (:id spec)))))
-
-(defn to-kv [k m]
-  [(m k) m])
 
 (defn create-buckets [{:keys [read write] :as spec}]
   (let [r (if read
@@ -50,7 +46,29 @@
 	w (if write
 	    (bucket (merge spec write))
 	    r)]
-    (assoc spec :read r :write w)))
+    (assoc spec
+      :read r :write w      
+      :write-spec (or write spec))))
+
+(defn add-flush-listeners [bucket-map bucket-spec]
+  (let [flush (-> bucket-spec :write-spec :flush)]
+    (if (or (nil? flush) (empty? flush))
+      bucket-spec
+      (update-in bucket-spec [:write]
+	with-reading-flush
+	(map (fn [f]
+	       (if (= f :self)
+		 (:write bucket-spec)
+		 (:write (bucket-map f))))
+	     flush)))))
+
+(defn with-flushes [bucket-map]  
+  (map-map
+   (partial add-flush-listeners bucket-map)
+   bucket-map))
+
+(defn to-kv [f m]
+  [(f m) m])
 
 (defn buckets [specs & [context]]
   (->> specs
@@ -59,7 +77,8 @@
 		  (add-context context)
 		  create-buckets
 		  (to-kv :name)))
-       (into {})))
+       (into {})
+       with-flushes))
 
 (deftype Store [bucket-map]
   clojure.lang.IFn
@@ -72,15 +91,42 @@
   (applyTo [this args]
 	   (apply store-op bucket-map args)))
 
+(defn flush! [^Store store]
+  (doseq [[_ spec] (.bucket-map store)
+	  :when (-> spec :write-spec :flush empty? not)]
+    (bucket-sync (:write spec))))
+
 (defn shutdown [^Store store]
   (doseq [[name spec] (.bucket-map store)]
     (bucket-close (:read spec))
-    (bucket-close (:write spec))))
+    (bucket-close (:write spec)))
+  (doseq [[name spec] (.bucket-map store)
+	  f (:shutdown spec)]
+    (f)))
 
-(defn flush! [^Store store]
-  (doseq [[_ spec] (.bucket-map store)
-	  :when (:flush? spec)]
-    (bucket-sync (:write spec))))
+(defn start-flush-pools [bucket-map]
+  (->> bucket-map
+       (map-map
+	(fn [{:keys [write,write-spec] :as bucket-spec}]
+	  (if (empty? (:flush write-spec))
+	    bucket-spec
+	    (let [pool (doto (Executors/newSingleThreadScheduledExecutor)
+			 (.scheduleAtFixedRate			  
+			  #(with-ex (logger) bucket-sync write)
+			  (long 0)
+			  (long (or (:flush-freq write-spec) 30))
+			  TimeUnit/SECONDS))]
+	      (-> bucket-spec
+		  (assoc :flush-pool pool)
+		  (update-in [:shutdown]
+			     conj
+			     (fn []
+			       (bucket-sync write)
+			       (.shutdownNow pool))))))))
+   
+       doall))
 
 (defn store [bucket-specs & [context]]
-  (store.api.Store. (buckets bucket-specs context)))
+  (-> (buckets bucket-specs context)
+      start-flush-pools
+      (Store.)))

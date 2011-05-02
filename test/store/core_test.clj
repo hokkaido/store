@@ -158,10 +158,12 @@
     (is (= (bucket-get b2 "k1") "v1"))))
 
 (deftest store-flush-test
-  (let [s (store [{:name "b" :flush? true :merge (fn [_ old new] (+ (or old 0) new))}
-		  "b1"])]
+  (let [s (store [{:name "b" :flush [:self]
+		   :merge (fn [_ old new] (+ (or old 0) new))}
+		  "b1"]
+		 {:type :mem})]
     (s :merge "b" "k" 1)
     (is (nil? (s :get "b" "k")))
-    (flush! s)
+    (s :sync "b")
     (s :put "b1" "k" 42)
     (is (= 1 (s :get "b" "k")))))
