@@ -79,14 +79,17 @@
 			  (json/generate-string body-arg)
 			  "UTF8")})))
 
-(defn process-client-response [op {:keys [status,body] :as resp}]
+(defn process-client-response
+  [op {:keys [status,body,keywordize?]
+       :or {keywordize? true}
+       :as resp}]
   (if (= status 200)                                   
     (if (#{"keys" "seq"} op)
       (-> ^java.io.InputStream body
 	  java.io.InputStreamReader.
 	  java.io.BufferedReader.
-	  json/parsed-seq)
-      (json/parse-string body))
+	  (json/parsed-seq keywordize?))
+      (json/parse-string body keywordize?))
     (throw (RuntimeException.
 	    (format "Rest bucket server error: %s"
 		    resp)))))
@@ -100,10 +103,10 @@
 	(map correct-url-encode pieces))))
 
 (defn rest-bucket
-  [& {:keys [name,host,port,keywordize-map?]
+  [& {:keys [name,host,port,keywordize?]
       :or {host "localhost"
 	   port 4445
-	   keywordize-map? false}}]
+	   keywordize? true}}]
   (when (nil? name)
     (throw (RuntimeException. "Must specify rest-bucket name")))
   
@@ -113,6 +116,7 @@
 		      (fn [[op & as] & [body-arg]]
 			(let [url (apply request-url base op name as)]
 			  (->> (exec-client-request op url body-arg)
+			       (merge {:keywordize? keywordize?})
 			       (process-client-response op)))))]
     (reify
      store.core.IReadBucket

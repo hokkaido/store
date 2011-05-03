@@ -68,7 +68,7 @@
     
     (bucket-put b "k2" {:a 1})
     (is (= 1
-           (-> b (bucket-get "k2") (get "a"))))
+           (-> b (bucket-get "k2") :a)))
 
     (is (= #{"k1" "k2"} (into #{} (bucket-keys b))))
     
@@ -82,4 +82,7 @@
     (is (nil? (bucket-get b "dne")))
 
     (bucket-update b "k2" inc)
-    (is (= (bucket-get b "k2") 3))))
+    (is (= (bucket-get b "k2") 3))
+
+    (bucket-put b "k3" {:a 1})
+    (is (= {:a 1} (bucket-get b "k3")))))
