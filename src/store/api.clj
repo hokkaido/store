@@ -35,9 +35,9 @@
   (if-not context
     spec
     (merge
-     spec
      context
-     (context (:id spec)))))
+     (context (:id spec))
+     spec)))
 
 (defn create-buckets [{:keys [read write] :as spec}]
   (let [r (if read
