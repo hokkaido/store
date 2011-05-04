@@ -51,14 +51,15 @@
       :write-spec (or write spec))))
 
 (defn add-flush-listeners [bucket-map bucket-spec]
-  (let [flush (-> bucket-spec :write-spec :flush)]
-    (if (or (nil? flush) (empty? flush) (= :mem (-> bucket-spec :write-spec :type)))
+  (let [b (-> bucket-spec :write)
+	flush (-> bucket-spec :write-spec :flush)]
+    (if (or (empty? flush))
       bucket-spec
       (update-in bucket-spec [:write]
 	with-reading-flush
 	(map (fn [f]
 	       (if (= f :self)
-		 (:write bucket-spec)
+		 b
 		 (:write (bucket-map f))))
 	     flush)))))
 
@@ -108,21 +109,21 @@
   (->> bucket-map
        (map-map
 	(fn [{:keys [write,write-spec] :as bucket-spec}]
-	  (if (empty? (:flush write-spec))
-	    bucket-spec
-	    (let [pool (doto (Executors/newSingleThreadScheduledExecutor)
-			 (.scheduleAtFixedRate			  
-			  #(with-ex (logger) bucket-sync write)
-			  (long 0)
-			  (long (or (:flush-freq write-spec) 30))
-			  TimeUnit/SECONDS))]
-	      (-> bucket-spec
-		  (assoc :flush-pool pool)
-		  (update-in [:shutdown]
-			     conj
-			     (fn []
-			       (bucket-sync write)
-			       (.shutdownNow pool))))))))
+	  (let [{:keys [flush,flush-freq]} write-spec]
+	    (if (or (empty? flush) (nil? flush-freq))
+	      bucket-spec
+	      (let [pool (doto (Executors/newSingleThreadScheduledExecutor)
+			   (.scheduleAtFixedRate			  
+			    #(with-ex (logger) bucket-sync write)
+			    (long 0) (long flush-freq)
+			    TimeUnit/SECONDS))]
+		(-> bucket-spec
+		    (assoc :flush-pool pool)
+		    (update-in [:shutdown]
+			       conj
+			       (fn []
+				 (bucket-sync write)
+				 (.shutdownNow pool)))))))))
    
        doall))
 
