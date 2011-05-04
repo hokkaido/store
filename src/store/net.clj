@@ -103,16 +103,17 @@
 	(map correct-url-encode pieces))))
 
 (defn rest-bucket
-  [& {:keys [name,host,port,keywordize?]
+  [& {:keys [name,host,port,keywordize?,observer]
       :or {host "localhost"
 	   port 4445
+	   observer (logger)
 	   keywordize? true}}]
   (when (nil? name)
     (throw (RuntimeException. "Must specify rest-bucket name")))
   
   (let [base (format "http://%s:%d/store/"
 		     (.replaceAll host "http://" "") port)
-        exec (partial with-ex (logger)
+        exec (partial with-ex observer
 		      (fn [[op & as] & [body-arg]]
 			(let [url (apply request-url base op name as)]
 			  (->> (exec-client-request op url body-arg)

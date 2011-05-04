@@ -52,7 +52,7 @@
 
 (defn add-flush-listeners [bucket-map bucket-spec]
   (let [flush (-> bucket-spec :write-spec :flush)]
-    (if (or (nil? flush) (empty? flush))
+    (if (or (nil? flush) (empty? flush) (= :mem (-> bucket-spec :write-spec :type)))
       bucket-spec
       (update-in bucket-spec [:write]
 	with-reading-flush

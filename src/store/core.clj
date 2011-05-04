@@ -248,6 +248,11 @@
                        (do-flush!)
                        (map bucket-close buckets))))))
 
+(defn caching-bucket
+  "policy takes [hit-or-miss? key "
+  [policy b]
+  )
+
 (defn caching-bucket [f merge-fn]
   (let [b (with-merge (hashmap-bucket) merge-fn)]
     (compose-buckets
