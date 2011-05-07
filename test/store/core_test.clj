@@ -167,3 +167,36 @@
     (s :sync "b")
     (s :put "b1" "k" 42)
     (is (= 1 (s :get "b" "k")))))
+
+(deftest bucket-counting-merge-test
+  (let [n 1000
+	b (with-merge
+	      (hashmap-bucket)
+	      (fn [_ sum x] (+ (or sum 0) x)))
+	latch (java.util.concurrent.CountDownLatch. n)
+	pool (java.util.concurrent.Executors/newFixedThreadPool 10)]
+    (dotimes [_ n]
+      (.submit pool (cast Runnable (fn []
+				     (bucket-merge b "k" 1)
+				     (.countDown latch)))))
+    (.await latch)
+    (bucket-get b "k")))
+
+
+
+(deftest bucket-counting-flush-test
+  (let [n 10000
+	b (with-merge
+	      (hashmap-bucket)
+	      (fn [_ sum x] (+ (or sum 0) x)))
+	b (with-reading-flush b [b])
+	pool (java.util.concurrent.Executors/newFixedThreadPool 100)
+	latch (java.util.concurrent.CountDownLatch. n)]
+    (dotimes [_ n]
+      (.submit pool (cast Runnable (fn []
+				     (bucket-merge b "k" 1)
+				     (bucket-sync b)
+				     (.countDown latch)))))
+    (.await latch)
+    (.shutdownNow pool)
+    (is (= n (bucket-get b "k")))))
