@@ -120,7 +120,7 @@
     (doseq [x (cons local-bucket remote-buckets)]
       (is (nil? (bucket-get x "k"))))
     (bucket-sync b2)
-    (doseq [x (concat [local-bucket] remote-buckets)]
+    (doseq [x remote-buckets]
       (is (= (bucket-get x "k")  {"v1" "v"})))))
 
 (deftest with-multicast-test
@@ -185,12 +185,12 @@
 
 
 (deftest bucket-counting-flush-test
-  (let [n 10000
+  (let [n 100000
 	b (with-merge
-	      (hashmap-bucket)
-	      (fn [_ sum x] (+ (or sum 0) x)))
+	    (hashmap-bucket)
+	    (fn [_ sum x] (+ (or sum 0) x)))
 	b (with-reading-flush b [b])
-	pool (java.util.concurrent.Executors/newFixedThreadPool 100)
+	pool (java.util.concurrent.Executors/newFixedThreadPool 1000)
 	latch (java.util.concurrent.CountDownLatch. n)]
     (dotimes [_ n]
       (.submit pool (cast Runnable (fn []

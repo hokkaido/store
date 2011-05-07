@@ -209,6 +209,13 @@
     (bucket-merge to k v))
   to)
 
+(defn bucket-flush-to!
+  "merge takes (k to-value from-value)"
+  [from tos]
+  (doseq [k (bucket-keys from)]
+    (when-let [v (bucket-delete from k)]
+      (doseq [to tos] (bucket-merge to k v)))))
+
 (defn with-multicast
   [buckets]
   (reify
@@ -229,24 +236,20 @@
                     (if (coll? b) (first b) b))))
   ([bucket flush-merge-fn]
      (let [buckets (if (coll? bucket) bucket [bucket])
-           get-bucket #(with-merge (hashmap-bucket) flush-merge-fn)
-           mem-bucket (java.util.concurrent.atomic.AtomicReference.
-                       (get-bucket))
-           do-flush! #(let [cur (.getAndSet mem-bucket (get-bucket))]
-                        (doseq [b buckets]
-                          (bucket-merge-to! cur b)))]
+           mem-bucket (with-merge (hashmap-bucket) flush-merge-fn)
+           do-flush! #(bucket-flush-to! mem-bucket buckets)]
        (reify
-         store.core.IWriteBucket
-         (bucket-merge [this k v]
-                       (bucket-merge (.get mem-bucket) k v))
-         (bucket-update [this k f]
-                        (bucket-update (.get mem-bucket) k f))
-         (bucket-sync [this]
-                      (do-flush!)
-                      (map bucket-sync buckets))
-         (bucket-close [this]
-                       (do-flush!)
-                       (map bucket-close buckets))))))
+	store.core.IWriteBucket
+	(bucket-merge [this k v]
+		      (bucket-merge mem-bucket k v))
+	(bucket-update [this k f]
+		       (bucket-update mem-bucket k f))
+	(bucket-sync [this]
+		     (do-flush!)
+		     (map bucket-sync buckets))
+	(bucket-close [this]
+		      (do-flush!)
+		      (map bucket-close buckets))))))
 
 (defn caching-bucket [f merge-fn]
   (let [b (with-merge (hashmap-bucket) merge-fn)]
