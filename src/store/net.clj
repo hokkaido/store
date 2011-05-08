@@ -103,8 +103,9 @@
 	(map correct-url-encode pieces))))
 
 (defn rest-bucket
-  [& {:keys [name,host,port,keywordize?,observer]
+  [& {:keys [name,host,port,keywordize?,batch-size]
       :or {host "localhost"
+	   batch-size 10000
 	   port 4445
 	   keywordize? true}}]
   (when (nil? name)
@@ -123,7 +124,10 @@
      (bucket-seq [this] (exec ["seq"]))
      (bucket-exists? [this k] (exec ["exists?" k]))
      (bucket-keys [this] (exec ["keys"]))
-     (bucket-batch-get [this ks] (exec ["batch-get"] ks))
+     (bucket-batch-get [this ks]
+       (->> ks
+	    (partition-all batch-size)
+	    (mapcat (partial exec ["batch-get"]))))
      (bucket-modified [this k] (exec ["modified" k]))
 
      store.core.IWriteBucket

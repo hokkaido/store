@@ -11,7 +11,7 @@
 
 (defprotocol IReadBucket
   (bucket-get [this k] "fetch value for key")
-  (bucket-batch-get [this ks] "values for many keys, return map with ks")
+  (bucket-batch-get [this ks] "return seq of [k v] pairs")
   (bucket-exists? [this k] "does key-value pair exists")
   (bucket-keys [this] "seq of existing keys")
   (bucket-seq [this] "seq of [k v] elems")
@@ -36,7 +36,7 @@
    (bucket-keys b)))
 
 (defn default-bucket-batch-get [b ks]
-  (into {} (for [k ks] [k (bucket-get b k)])))
+  (for [k ks] [k (bucket-get b k)]))
 
 (defn default-bucket-update [b k f]
   (->>  k

@@ -58,6 +58,7 @@
 (deftest rest-bucket-test
   (let [b (rest-bucket :name "b1"
                        :host "localhost"
+		       :batch-size 2
                        :port 4445)]
     (bucket-put b "k1" "v1")
     (is (= (bucket-get b "k1") "v1"))
@@ -85,4 +86,15 @@
     (is (= (bucket-get b "k2") 3))
 
     (bucket-put b "k3" {:a 1})
-    (is (= {:a 1} (bucket-get b "k3")))))
+    (is (= {:a 1} (bucket-get b "k3")))
+
+    (bucket-put b "k1" "v1")
+    (bucket-put b "k2" "v2")
+    (bucket-put b "k3" "v3")
+    (bucket-put b "k4" "v4")
+    (is (=
+	 (seq {"k1" "v1"
+	   "k2" "v2"
+	   "k3" "v3"
+	   "k4" "v4"})
+	  (sort-by first (bucket-batch-get b ["k1" "k2" "k3" "k4"]))))))
