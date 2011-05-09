@@ -1,8 +1,10 @@
 # Store 
 
+Store general key-value store api in Clojure. The goal of store is to abstract away from policies about how data is stored and provide a uniform API for application data.
+
 ## Basics
 
-Store general key-value store api in Clojure. The goal of store is to abstract away from policies about how data is stored and provide a uniform API for application data. A store consists of many buckets and each bucket has it's own key-value namespace. A store operation takes the form 
+ A store consists of many buckets and each bucket has it's own key-value namespace. A store operation takes the form 
 
   (store operation bucket-name & args)
 
