@@ -60,7 +60,7 @@ In <code>store.net</code> you can trivially expose a store over a REST interface
 
 Or if you want to merge values to a store across the network 
 
-     curl -X POST -d '{"status": "I love Dr. Who"}' http://my-store-host.com/store/merge/tweets/user
+     curl -X POST -d '[{"status": "I love Dr. Who"}]' http://my-store-host.com/store/merge/tweets/user
 
 to merge the given tweet with the rest of the tweets without `pulling down' all tweets from the store. This is useful for writing services that need to aggregate data structures without seeing the whole object. 
 
