@@ -8,13 +8,13 @@ You specify a store by specifying a collection of buckets. Here's an example
 
     (def bucket-specs
     	 [{:name "tweets"
-      	 :type :fs
-	 :path "/tmp/data/tweets"
-         :merge (fn [key old-tweets new-tweets] (concat old-tweets new-tweets))}
+      	   :type :fs
+	   :path "/tmp/data/tweets"
+           :merge (fn [key old-tweets new-tweets] (concat old-tweets new-tweets))}
      	 {:name "session"
 	  :type :mem}
          {:name "visit-statistics"
-	  :type :bdb
+          :type :bdb
           :merge (fn [key cur-stats new-stats] (merge-with + cur-stats new-stats))
           :flush [:self]
           :flush-freq 30}
@@ -56,11 +56,11 @@ where operation is the name of a bucket operation and args are any other args ne
 
 In <code>store.net</code> you can trivially expose a store over a REST interface (using Jetty as the underlying server). The REST api for accessing the store looks like this
 
-   curl http://my-store-host.com/store/get/bucket/key
+     curl http://my-store-host.com/store/get/bucket/key
 
 Or if you want to merge values to a store across the network 
 
-   curl -X POST -d '{"status": "I love Dr. Who"}' http://my-store-host.com/store/merge/tweets/user
+     curl -X POST -d '{"status": "I love Dr. Who"}' http://my-store-host.com/store/merge/tweets/user
 
 to merge the given tweet with the rest of the tweets without `pulling down' all tweets from the store. This is useful for writing services that need to aggregate data structures without seeing the whole object. 
 
