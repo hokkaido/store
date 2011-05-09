@@ -8,15 +8,15 @@ Store general key-value store api in Clojure. The goal of store is to abstract a
 
 where operation is the name of a bucket operation and args are any other args needed for the operations. The following are valid store operations:
 
-    * :get  - return value associated with a given key in a bucket <code>(s :get "bucket" "key") </code>
-    * :put  - store value associated with a given key in a bucket <code>(s :put "bucket" "key" "val")</code> 
-    * :update - update value associated with a key using a function <code>(s :update "visitor-counts" "user" (fnil inc 0)</code>
-    * :merge - a special case of update for a merging function specific to the bucket specified at bucket-declaration <code>(s :merge "visior-counts" "user" 1)</code>.  
-    * :delete - delete a key-value pair <code>(s :delete "bucket" "key")</code>.
-    * :exists? - does a given key exist? (s :exists? "bucket" "key")
-    * :keys - return seq of bucket keys
-    * :seq - return seq of [k v] pairs in bucket
-    * :sync - when using a bucket with flush (see below) sync in-memory state to underlying bucket
+    :get  - return value associated with a given key in a bucket <code>(s :get "bucket" "key") </code>
+    :put  - store value associated with a given key in a bucket <code>(s :put "bucket" "key" "val")</code> 
+    :update - update value associated with a key using a function <code>(s :update "visitor-counts" "user" (fnil inc 0)</code>
+    :merge - a special case of update for a merging function specific to the bucket specified at bucket-declaration <code>(s :merge "visior-counts" "user" 1)</code>.  
+    :delete - delete a key-value pair <code>(s :delete "bucket" "key")</code>.
+    :exists? - does a given key exist? (s :exists? "bucket" "key")
+    :keys - return seq of bucket keys
+    :seq - return seq of [k v] pairs in bucket
+    :sync - when using a bucket with flush (see below) sync in-memory state to underlying bucket
    
 ## Specifying a Store
 
