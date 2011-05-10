@@ -16,6 +16,4 @@
                  [clj-time "0.3.0-SNAPSHOT"]]
   :dev-dependencies [[swank-clojure "1.3.0-SNAPSHOT"]]
   :jvm-opts ["-Xmx600m"]
-  :repositories {"snapshots" "http://mvn.getwoven.com/repos/woven-public-snapshots"
-                 "releases" "http://mvn.getwoven.com/repos/woven-public-releases"
-                 "oracle" "http://download.oracle.com/maven/"})
+  :repositories {"oracle" "http://download.oracle.com/maven/"})
