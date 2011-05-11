@@ -98,12 +98,12 @@
     (bucket-sync (:write spec))))
 
 (defn shutdown [^Store store]
-  (doseq [[name spec] (.bucket-map store)]
-    (bucket-close (:read spec))
-    (bucket-close (:write spec)))
   (doseq [[name spec] (.bucket-map store)
 	  f (:shutdown spec)]
-    (f)))
+    (with-ex (logger) f))
+  (doseq [[name spec] (.bucket-map store)]
+    (with-ex (logger)  bucket-close (:read spec))
+    (with-ex (logger)  bucket-close (:write spec))))
 
 (defn start-flush-pools [bucket-map]
   (->> bucket-map

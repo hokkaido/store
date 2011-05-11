@@ -195,7 +195,8 @@
       (.endBackup backup)
       ret)))
 
-(defn bdb-env-close [^Environment env] (.close env))  
+(defn bdb-env-close [^Environment env]
+  (.close env))  
 
 (defn bdb-db
   "Parameters:

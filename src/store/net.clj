@@ -135,5 +135,5 @@
      (bucket-delete [this k] (exec ["delete" k]))
      (bucket-update [this k f] (default-bucket-update this k f))
      (bucket-merge [this k v] (exec ["merge" k] v))
-     (bucket-close [this] (exec ["close"]))
+     (bucket-close [this])
      (bucket-sync [this] (exec ["sync"])))))
