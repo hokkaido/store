@@ -13,7 +13,7 @@
                  [compojure "0.6.1"]
                  [ring/ring-core "0.3.7"]
                  [ring/ring-jetty-adapter "0.3.7"]
-                 [clj-time "0.3.0-SNAPSHOT"]]
+                 [clj-time "0.4.0-SNAPSHOT"]]
   :dev-dependencies [[swank-clojure "1.3.0-SNAPSHOT"]]
   :jvm-opts ["-Xmx600m"]
   :repositories {"oracle" "http://download.oracle.com/maven/"})
