@@ -23,8 +23,10 @@
 	(throw (java.lang.Exception.
 		(format "bucket type %s does not exist." type)))))
 
-(defn with-reading-flush [b flushes]
-  (compose-buckets b (with-flush flushes)))
+(defn with-reading-flush 
+  ([b] (with-reading-flush b [b]))
+  ([b flushes]
+   (compose-buckets b (with-flush flushes))))
 
 (defn bucket
   [{:keys [merge,flush?] :as spec}]
