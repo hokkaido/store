@@ -23,15 +23,16 @@
 	(throw (java.lang.Exception.
 		(format "bucket type %s does not exist." type)))))
 
-(defn with-reading-flush 
-  ([b] (with-reading-flush b [b]))
-  ([b flushes]
-   (compose-buckets b (with-flush flushes))))
+(defn add-flush [bucket flush]
+  (compose-buckets
+   bucket
+   (with-flush bucket flush)))
 
 (defn bucket
-  [{:keys [merge,flush?] :as spec}]
+  [{:keys [merge,flush] :as spec}]
   (-> (raw-bucket spec)
-      (?> merge with-merge merge)))
+      (?> merge with-merge merge)
+      (?> flush add-flush flush)))
 
 (defn add-context [context spec]
   (if-not context
@@ -52,23 +53,6 @@
       :read r :write w      
       :write-spec (or write spec))))
 
-(defn add-flush-listeners [bucket-map bucket-spec]
-  (let [b (-> bucket-spec :write)
-	flush (-> bucket-spec :write-spec :flush)]
-    (if (or (empty? flush))
-      bucket-spec
-      (update-in bucket-spec [:write]
-	with-reading-flush
-	(map (fn [f]
-	       (if (= f :self)
-		 b
-		 (:write (bucket-map f))))
-	     flush)))))
-
-(defn with-flushes [bucket-map]  
-  (map-map
-   (partial add-flush-listeners bucket-map)
-   bucket-map))
 
 (defn to-kv [f m]
   [(f m) m])
@@ -80,8 +64,7 @@
 		  (add-context context)
 		  create-buckets
 		  (to-kv :name)))
-       (into {})
-       with-flushes))
+       (into {})))
 
 (deftype Store [bucket-map]
   clojure.lang.IFn
@@ -96,7 +79,7 @@
 
 (defn flush! [^Store store]
   (doseq [[_ spec] (.bucket-map store)
-	  :when (-> spec :write-spec :flush empty? not)]
+	  :when (-> spec :write-spec :flush)]
     (bucket-sync (:write spec))))
 
 (defn shutdown [^Store store]
@@ -111,8 +94,8 @@
   (->> bucket-map
        (map-map
 	(fn [{:keys [write,write-spec] :as bucket-spec}]
-	  (let [{:keys [flush,flush-freq]} write-spec]
-	    (if (or (empty? flush) (nil? flush-freq))
+	  (let [{:keys [flush-freq]} write-spec]
+	    (if-not flush-freq
 	      bucket-spec
 	      (let [pool (doto (Executors/newSingleThreadScheduledExecutor)
 			   (.scheduleAtFixedRate			  

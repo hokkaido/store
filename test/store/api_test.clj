@@ -24,46 +24,15 @@
     (s :merge "foo" :a 4)
     (= 5 (s :get "foo" :a))))
 
-(deftest add-flush-listeners-test
-  (let [sum-agg (fn [_ sum x] (+ (or sum 0) x))
-	b1 (with-merge
-	     (hashmap-bucket)
-	     sum-agg)
-	b2 (with-merge
-	     (hashmap-bucket)
-	     sum-agg)
-	bucket (:write
-		(add-flush-listeners
-		 {"b1" {:write-spec {:flush [:self "b2"]}
-			:write b1}
-		  "b2" {:write b2}}
-		 {:write-spec {:flush [:self "b2"]}
-		  :write b1}))]
-    (bucket-merge bucket "k" 1)
-    (is (nil? (bucket-get b1 "k")))
-    (is (nil? (bucket-get b2 "k")))
-    (bucket-sync bucket)
-    (is (= 1 (bucket-get b1 "k")))
-    (is (= 1 (bucket-get b2 "k")))))
-
 (deftest store-final-flush-test
   (let [s (store
-	   [{:name "b1"
-	     :merge (fn [_ sum x] (+ (or sum 0) x))}
-	    {:name "b2"
+	   [{:name "b2"
 	     :merge (fn [_ sum x] (+ (or sum 0) x))
-	     :flush ["b1"]}]
-	   {:type :mem})]
-    (buckets [{:name "b1"
-	     :merge (fn [_ sum x] (+ (or sum 0) x))}
-	    {:name "b2"
-	     :merge (fn [_ sum x] (+ (or sum 0) x))
-	     :flush ["b1"]}]
-	    {:type :mem} )
+	     :flush (fn [_ sum x] (+ (or sum 0) x))}])]
     (s :merge "b2" "k" 42)
-    (is (nil? (s :get "b1" "k")))
+    (is (nil? (s :get "b2" "k")))
     (s :sync "b2")
-    (is (= 42 (s :get "b1" "k")))))
+    (is (= 42 (s :get "b2" "k")))))
 
 (deftest store-op-test
   (is (= 42
@@ -75,7 +44,7 @@
 	     (hashmap-bucket)
 	     (fn [_ sum x] (+ (or sum 0) x)))
 	bs (start-flush-pools
-	    {"b" {:write-spec {:flush [:self] :flush-freq 2}
+	    {"b" {:write-spec {:flush (fn [_ sum x] (+ (or sum 0) x)) :flush-freq 2}
 		  :write b
 		  :read b}})
 	s (store.api.Store. bs)]
