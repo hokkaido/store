@@ -27,7 +27,6 @@
 (deftest store-final-flush-test
   (let [s (store
 	   [{:name "b2"
-	     :merge (fn [_ sum x] (+ (or sum 0) x))
 	     :flush (fn [_ sum x] (+ (or sum 0) x))}])]
     (s :merge "b2" "k" 42)
     (is (nil? (s :get "b2" "k")))
