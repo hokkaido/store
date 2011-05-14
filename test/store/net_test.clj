@@ -97,4 +97,22 @@
 	   "k2" "v2"
 	   "k3" "v3"
 	   "k4" "v4"})
-	  (sort-by first (bucket-batch-get b ["k1" "k2" "k3" "k4"]))))))
+	 (sort-by first (bucket-batch-get b ["k1" "k2" "k3" "k4"]))))))
+
+(deftest rest-bucket-test
+  (let [b (rest-bucket :name "b1"
+                       :host "localhost"
+		       :batch-size 2
+                       :port 4445)
+	body (fetcher.core/fetch :get "http://www.google.com")
+	pool (java.util.concurrent.Executors/newFixedThreadPool 100)
+	tasks (range 1000)
+	latch (java.util.concurrent.CountDownLatch. (count tasks))]
+    (doseq [x tasks]
+      (.submit pool
+	       (cast Runnable
+		     #(do (bucket-put b (str x) (:body body))
+			  (.countDown latch)))))
+    (.await latch)
+    (.shutdown pool)
+    (is (= 1000 (count (bucket-keys b))))))
