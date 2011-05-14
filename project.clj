@@ -4,7 +4,6 @@
                  [org.clojure/clojure-contrib "1.2.0"]
                  [woven/clj-json "0.3.2-SNAPSHOT"]
                  [net.java.dev.jets3t/jets3t "0.7.4"]
-                 [clj-serializer  "0.1.1"]
                  [clj-sys/plumbing "0.1.5-SNAPSHOT"]
 		 [fetcher "0.0.5-SNAPSHOT"]
                  [ring/ring-core "0.3.1"]
