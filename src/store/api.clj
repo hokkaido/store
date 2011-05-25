@@ -4,7 +4,6 @@
 	[plumbing.error :only [with-ex logger]]
 	store.core
 	store.net
-	store.riak
 	store.bdb)
   (:import [java.util.concurrent Executors TimeUnit]))
 
@@ -19,7 +18,6 @@
 	:fs (fs-bucket path name)
 	:mem (hashmap-bucket)
 	:rest (apply rest-bucket (apply concat opts))
-	:riak (apply riak-bucket (apply concat opts)) 
 	(throw (java.lang.Exception.
 		(format "bucket type %s does not exist." type)))))
 

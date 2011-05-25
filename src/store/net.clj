@@ -66,14 +66,16 @@
 	    (parse-body b)))]))
 
 ;; url (str base (str/join "/" (concat [op name] as)))
-(defn exec-client-request [op url & [body-arg]]
+(defn exec-client-request [get-client op url & [body-arg]]
   (if-not body-arg
-    (client/fetch :get
+    (client/fetch get-client
+		  :get
 		  {:url url
 		   :as (if (#{"keys" "seq"} op)
 			 :input-stream
 			 :string)})				    
-    (client/fetch :post 
+    (client/fetch get-client
+                  :post 
 		  {:url url
 		   :body (.getBytes
 			  (json/generate-string body-arg)
@@ -103,19 +105,19 @@
 	(map correct-url-encode pieces))))
 
 (defn rest-bucket
-  [& {:keys [name,host,port,keywordize?,batch-size]
+  [& {:keys [name,host,port,keywordize?,batch-size,client-ops]
       :or {host "localhost"
 	   batch-size 10000
 	   port 4445
 	   keywordize? true}}]
   (when (nil? name)
-    (throw (RuntimeException. "Must specify rest-bucket name")))
-  
+    (throw (RuntimeException. "Must specify rest-bucket name")))  
   (let [base (format "http://%s:%d/store/"
 		     (.replaceAll host "http://" "") port)
+	get-client #(client/basic-http-client client-ops)
         exec (fn [[op & as] & [body-arg]]
 	       (let [url (apply request-url base op name as)]
-		 (->> (exec-client-request op url body-arg)
+		 (->> (exec-client-request get-client op url body-arg)
 		      (merge {:keywordize? keywordize?})
 		      (process-client-response op))))]
     (reify
