@@ -75,7 +75,8 @@
   (invoke [this op bucket-name]
 	  (cond (= op :add)
 		(bucket-put bucket-map bucket-name
-			    (create-buckets context))
+			    (create-buckets (assoc context
+					      :name bucket-name)))
 		(= op :remove)
 		(bucket-delete bucket-map bucket-name)
 		:else (store-op bucket-map op bucket-name)))
