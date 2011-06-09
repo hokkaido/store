@@ -46,6 +46,14 @@
 	     OperationStatus/SUCCESS)
       (from-entry entry-val))))
 
+(defn bdb-exists? [^Database db k]
+  (let [entry-key (to-entry k)
+        entry-val (DatabaseEntry.)]
+    (.setPartial entry-val (int 0) (int 0) true)
+    (= (.get db nil entry-key entry-val LockMode/DEFAULT)
+       OperationStatus/SUCCESS)))
+
+
 (defn cursor-next
   "returns a fn which acts as a cursor over db. each call
    returns a [key value] pair. closes cursor when all entries exhausted"
@@ -227,7 +235,7 @@
     (bucket-seq [this]
                 (entries-seq db))
 
-    (bucket-exists? [this k] (default-bucket-exists? this k))
+    (bucket-exists? [this k] (bdb-exists? db k))
 
     IWriteBucket
 
