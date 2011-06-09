@@ -46,10 +46,22 @@
 	    {"b" {:write-spec {:flush (fn [_ sum x] (+ (or sum 0) x)) :flush-freq 2}
 		  :write b
 		  :read b}})
-	s (store.api.Store. bs)]
+	s (store.api.Store. bs {})]
     (s :merge "b" "k" 42)
     (Thread/sleep 2000)
     (is (= 42 (s :get "b" "k")))
     (shutdown s)
     (Thread/sleep 1000)
-    (is (.isShutdown (:flush-pool (bs "b"))))))
+    (is (.isShutdown (:flush-pool (bucket-get bs "b"))))))
+
+(deftest store-with-dynamic-bucket
+  (let [s (store [{:name "foo"
+		   :merge (fn [_ x y]
+			    (+ (or x 0) (or y 0)))}]
+		 {:type :mem})]
+    (s :put "foo" :a 1)
+    (s :add "bar")
+    (s :put "bar" :b 2)
+
+    (= 1 (s :get "foo" :a))
+    (= 2 (s :get "bar" :b))))

@@ -3,7 +3,6 @@
   (:use clojure.test
         store.api
 	store.core
-        store.riak
         [plumbing.core :only [find-first map-from-keys]]))
 
 (defn generic-bucket-test [b]

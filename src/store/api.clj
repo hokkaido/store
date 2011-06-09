@@ -4,9 +4,9 @@
 	[plumbing.error :only [with-ex logger]]
 	store.core
 	store.net
-	store.riak
 	store.bdb)
-  (:import [java.util.concurrent Executors TimeUnit]))
+  (:import [java.util.concurrent Executors TimeUnit
+	    ConcurrentHashMap]))
 
 (defn raw-bucket [{:keys [name type db-env host port path]
 		   :or {type :mem}
@@ -19,7 +19,6 @@
 	:fs (fs-bucket path name)
 	:mem (hashmap-bucket)
 	:rest (apply rest-bucket (apply concat opts))
-	:riak (apply riak-bucket (apply concat opts)) 
 	(throw (java.lang.Exception.
 		(format "bucket type %s does not exist." type)))))
 
@@ -57,7 +56,6 @@
       :read r :write w      
       :write-spec (or write spec))))
 
-
 (defn to-kv [f m]
   [(f m) m])
 
@@ -68,12 +66,19 @@
 		  (add-context context)
 		  create-buckets
 		  (to-kv :name)))
-       (into {})))
+       (into {})
+       (ConcurrentHashMap.)
+       hashmap-bucket))
 
-(deftype Store [bucket-map]
+(deftype Store [bucket-map context]
   clojure.lang.IFn
   (invoke [this op bucket-name]
-	  (store-op bucket-map op bucket-name))
+	  (cond (= op :add)
+		(bucket-put bucket-map bucket-name
+			    (create-buckets context))
+		(= op :remove)
+		(bucket-delete bucket-map bucket-name)
+		:else (store-op bucket-map op bucket-name)))
   (invoke [this op bucket-name key]
 	  (store-op bucket-map op bucket-name key))
   (invoke [this op bucket-name key val]
@@ -87,15 +92,16 @@
     (bucket-sync (:write spec))))
 
 (defn shutdown [^Store store]
-  (doseq [[name spec] (.bucket-map store)
+  (doseq [[name spec] (bucket-seq (.bucket-map store))
 	  f (:shutdown spec)]
     (with-ex (logger) f))
-  (doseq [[name spec] (.bucket-map store)]
+  (doseq [[name spec] (bucket-seq (.bucket-map store))]
     (with-ex (logger)  bucket-close (:read spec))
     (with-ex (logger)  bucket-close (:write spec))))
 
 (defn start-flush-pools [bucket-map]
   (->> bucket-map
+       bucket-seq
        (map-map
 	(fn [{:keys [write,write-spec] :as bucket-spec}]
 	  (let [{:keys [flush-freq]} write-spec]
@@ -114,9 +120,12 @@
 				 (bucket-sync write)
 				 (.shutdownNow pool)))))))))
    
-       doall))
+       doall
+       (into {})
+       (ConcurrentHashMap.)
+       hashmap-bucket))
 
 (defn store [bucket-specs & [context]]
   (-> (buckets bucket-specs context)
       start-flush-pools
-      (Store.)))
+      (Store. context)))

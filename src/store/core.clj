@@ -281,16 +281,16 @@
    :modified bucket-modified})
 
 (def write-ops
-  {:put bucket-put
-   :delete bucket-delete
-   :merge bucket-merge
-   :update bucket-update
-   :sync bucket-sync
-   :close bucket-close})
+     {:put bucket-put
+      :delete bucket-delete
+      :merge bucket-merge
+      :update bucket-update
+      :sync bucket-sync
+      :close bucket-close})
 
 (defn store-op [bucket-map op name & args]
   (let [b (if (find read-ops op)
-	    (-> name bucket-map :read)
-	    (-> name bucket-map :write))        
+	    (->> name (bucket-get bucket-map) :read)
+	    (->> name (bucket-get bucket-map) :write))        
 	f (or (read-ops op) (write-ops op))]
     (apply f b args)))
