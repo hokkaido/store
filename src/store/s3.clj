@@ -1,14 +1,10 @@
 (ns 
 #^{:doc "a lib for interacting with s3."}
 store.s3
-  (:use 
-        clj-serializer.core
-	store.core
-	[plumbing.core :only [with-silent]])
+(:use store.core)
   (:require [clojure.contrib.duck-streams :as ds])
   (:import
        java.io.File
-       clj_serializer.Serializer
        [java.io DataOutputStream ByteArrayOutputStream ObjectOutputStream
 	        DataInputStream ByteArrayInputStream ObjectInputStream]
        org.jets3t.service.S3Service
@@ -22,7 +18,7 @@ store.s3
      (s3-connection access-key secret-key))
   ([k sk] (RestS3Service. (AWSCredentials. k sk))))
 
-(defn buckets [s3] (.listAllBuckets s3))
+(defn s3-buckets [s3] (.listAllBuckets s3))
 
 (defn objects
   ([s3 bucket-name] 
@@ -34,12 +30,6 @@ store.s3
   (map #(.getKey %)
        (seq (objects s b))))
 
-(defn folder? [o]
-  (or (> (.indexOf o "$folder$") 0)
-      (> (.indexOf o "logs") 0)))
-
-(defn without-folders [c]
-  (filter #(not (folder? (.getKey %))) c))
 
 (defn create-bucket [s3 bucket-name]
   (.createBucket s3 bucket-name))
@@ -54,145 +44,45 @@ store.s3
   (or (.deleteObject s3 bucket-name key)
       :success))
 
-(defn put-file
-  ([s3 bucket-name file]
-     (let [bucket (.getBucket s3 bucket-name)
-	   s3-object (S3Object. bucket file)]
-       (.putObject s3 bucket s3-object)))
-  ([connection bucket-name key file]
-     (let [bucket (.getBucket connection bucket-name)
-	   s3-object (S3Object. bucket file)]
-       (.setKey s3-object key)
-       (.putObject connection bucket s3-object))))
-
-(defn put-str
- [s3 bucket-name key data]
-  (let [bucket (.getBucket s3 bucket-name)
-        s3-object (S3Object. bucket key data)]
-    (.putObject s3 bucket s3-object)))
-
-(defn obj-to-str [obj]
-  (ServiceUtils/readInputStreamToString (.getDataInputStream obj) "UTF-8"))
-
-(defn get-str [s3 bucket-name key]
-  (let [bucket (.getBucket s3 bucket-name)
-        obj (.getObject s3 bucket key)]
-    (obj-to-str obj)))
 
 (defn put-clj [s3 bucket-name key clj]
   (let [bucket (.getBucket s3 bucket-name)  
-        s3-object (S3Object. bucket key)
-	_ (.setDataInputStream s3-object (ByteArrayInputStream. (serialize clj)))]
+        s3-object (S3Object. bucket key ^String (pr-str clj))]
     (.putObject s3 bucket s3-object)))
 
-(defn s3-deserialize
-  ([is eof-val]
-     (let [dis (DataInputStream. is)]
-       (try 
-         (Serializer/deserialize dis eof-val)
-         (finally 
-          (.close dis)))))
-  ([obj]
-     (s3-deserialize (-> obj
-                         .getDataInputStream
-                         .getWrappedInputStream)
-                     (Object.))))
-
-(defn get-clj [s3 bucket-name key]
+(defn get-clj [^RestS3Service s3 ^String bucket-name ^String key]
   (let [bucket (.getBucket s3 bucket-name)
-        obj (.getObject s3 bucket key)]
-    (s3-deserialize
-      (.getWrappedInputStream 
-      (.getDataInputStream obj))
-     (Object.))))
+        obj (.getObject s3 bucket key)
+        s   (.getDataInputStream obj)]
+    (when s (read (java.io.PushbackReader. (java.io.InputStreamReader. s))))))
 
-;;TODO: is there a shorter way to deal with the stream hell of
-;;getting a java object serialized onto an input stream?
-;;references
-;;http://markmail.org/message/n5otqusrl6jda4ei
-;;http://www.exampledepot.com/egs/java.io/serializeobj.html
-(defn put-obj [s3 bucket-name key obj]
-  (let [bos (ByteArrayOutputStream.)
-	out (ObjectOutputStream. bos)
-	_ (.writeObject out obj)
-	_ (.close out)
-	ba (.toByteArray out)
-	bucket (.getBucket s3 bucket-name)  
-        s3-object (S3Object. bucket key)
-	_ (.setContentLength s3-object (.length ba)) 
-	_ (.setDataInputStream s3-object (ByteArrayInputStream. ba))]
-    (.putObject s3 bucket s3-object)))
 
-(defn get-obj [s3 bucket-name key]
-  (let [bucket (.getBucket s3 bucket-name)
-        s3-obj (.getObject s3 bucket key)
-	ois (ObjectInputStream.
-	     (.getWrappedInputStream (.getDataInputStream s3-obj)))
-	obj (.readObject ois)
-	_  (.close ois)]
-    obj))
 
-;;TODO: the high throughput way is to do eventual appendes, keep writing and periodiucly roll up via some compactor service.
-;;read in root and individual appends.
-;;append
-;;write out append to 3rd location.
-;;move append to primary location
-;;delete individual appends.
-;; (defn append-str [s3 bucket-name key data]
-;;   (let [old ((with-silent get-str)
-;; 	       s3 bucket-name key)]
-;;     (put-str s3 bucket-name key (append [old data]))))
-
-;; (defn append-clj [s3 bucket-name key data]
-;;   (let [old ((with-silent get-clj)  s3 bucket-name key)]
-                         
-;;     (put-clj s3 bucket-name key (append [old data]))))
-
-(defn files [dir]
-  (for [file (file-seq (File. dir))
-	      :when (.isFile file)]
-	     file))
-
-;;TODO: refactor to use built in multi-file upload.
-;;http://markmail.org/message/n5otqusrl6jda4ei
-(defn put-dir
-"create a new bucket b. copy everything from dir d to bucket b."
-[s3 d b]
-    (create-bucket s3 b)
-    (dorun 
-      (for [f (files d)]
-	     (put-file s3 b f))))
-
-(defn get-dir
-"read the object(s) at the root/rest s3 uri into memory using a s3/get-foo fn."
- [s3 root-bucket rest rdr]
-  (let [files (without-folders (objects s3 root-bucket rest))]
-    (map #(rdr s3 root-bucket (.getKey %)) files)))
 
 (defn s3-bucket
   "Takes a S3 connection, a bucket name, and an optional map from logical
   bucket name to actual S3 bucket name."
   [s3 bucket-name]
+  (create-bucket s3 bucket-name)
   (reify store.core.IReadBucket
-         (bucket-keys [this]
-                      (get-keys s3 bucket-name))
-         (bucket-get [this k]
-                     (get-clj s3 bucket-name (str k)))
+    (bucket-keys [this]
+      (get-keys s3 bucket-name))
 
-	 (bucket-exists? [this k]
-            (some #(= k (.getKey %))
-		  (-?> s3 (objects bucket-name (str k)) seq)))
+    (bucket-get [this k]
+      (get-clj s3 bucket-name (str k)))
+    
+    (bucket-exists? [this k]
+      (some #(= k (.getKey %))
+            (-> s3 (objects bucket-name (str k)) seq)))
 
-	 (bucket-seq [this] (default-bucket-seq this))	 
+    (bucket-seq [this] (default-bucket-seq this))	 
 	 
-	 store.core.IWriteBucket
-	 (bucket-put [this k v]
-                     (put-clj s3 bucket-name (str k) v))
-	 
-         (bucket-delete [this k]
-                        (delete-object s3 bucket-name (str k)))
-	          (bucket-put [this k v]
-			      (put-clj s3 bucket-name (str k) v))
-		  
-         (bucket-update [this k f]
-                        (default-bucket-update this k f))))
+    store.core.IWriteBucket
+    (bucket-put [this k v]
+      (put-clj s3 bucket-name (str k) v))
+    
+    (bucket-delete [this k]
+      (delete-object s3 bucket-name (str k)))
+    
+    (bucket-update [this k f]
+      (default-bucket-update this k f))))
