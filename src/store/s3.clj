@@ -31,13 +31,13 @@ store.s3
        (seq (objects s b))))
 
 
-(defn create-bucket [s3 bucket-name]
+(defn create-bucket [^RestS3Service s3 ^String bucket-name]
   (.createBucket s3 bucket-name))
 
-(defn delete-bucket [s3 bucket-name]
+(defn delete-bucket [^RestS3Service s3 ^String bucket-name]
   (.deleteBucket s3 bucket-name))
 
-(defn delete-object [s3 bucket-name key]
+(defn delete-object [^RestS3Service s3 ^String bucket-name ^String key]
   ;; In case the J3tset API changes and starts returning non-nil on success.
   ;; NOTE: S3 seems to be returning nil regardless of whether key existed.
   ;; In that case, this function always returns success even if key didn't exist.
@@ -45,7 +45,7 @@ store.s3
       :success))
 
 
-(defn put-clj [s3 bucket-name key clj]
+(defn put-clj [^RestS3Service s3 ^String bucket-name ^String key clj]
   (let [bucket (.getBucket s3 bucket-name)  
         s3-object (S3Object. bucket key ^String (pr-str clj))]
     (.putObject s3 bucket s3-object)))
