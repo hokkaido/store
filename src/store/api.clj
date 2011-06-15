@@ -70,22 +70,75 @@
        (ConcurrentHashMap.)
        hashmap-bucket))
 
+(def read-ops
+  {:get bucket-get
+   :batch-get bucket-batch-get
+   :seq bucket-seq
+   :bucket (fn [bucket & args] bucket)
+   :keys bucket-keys
+   :get-ensure
+   (fn [bucket key default-fn]
+     (if-let [v (bucket-get bucket key)]
+       v
+       (let [res (default-fn)]
+         (bucket-put bucket key res)
+         res)))
+   :exists? bucket-exists?
+   :modified bucket-modified})
+
+(def write-ops
+     {:put bucket-put
+      :delete bucket-delete
+      :merge bucket-merge
+      :update bucket-update
+      :sync bucket-sync
+      :close bucket-close})
+
+(def bucket-ops
+     {:add (fn [store bucket-name]
+	     (let [bucket (create-buckets (assoc (.context store)
+					    :name bucket-name))]
+	       (bucket-put
+		(.bucket-map store)
+		bucket-name
+		bucket)))
+      :remove (fn [store bucket-name]
+		(bucket-delete
+		 (.bucket-map store) bucket-name))})
+
+(def rest-bucket-ops
+     {:add (fn [store bucket-name]
+	     (rest-call (assoc (.context store)
+			  :op "add"
+			  :name bucket-name)))
+      :remove (fn [store bucket-name]
+		(rest-call (assoc (.context store)
+			     :op "remove"
+			     :name bucket-name)))})
+
+(defn store-op [store op name & args]
+  (if (find bucket-ops op)
+    (let [{:keys [type]} (.context store)]
+      (when (= type :rest)
+	((op rest-bucket-ops) store name))
+      ((op bucket-ops) store name))
+    (let [read (read-ops op)
+	  spec (->> name (bucket-get (.bucket-map store)))
+	  b (if read (:read spec)
+		(:write spec))
+	  f (or read (write-ops op))]
+      (apply f b args))))
+
 (deftype Store [bucket-map context]
   clojure.lang.IFn
   (invoke [this op bucket-name]
-	  (cond (= op :add)
-		(bucket-put bucket-map bucket-name
-			    (create-buckets (assoc context
-					      :name bucket-name)))
-		(= op :remove)
-		(bucket-delete bucket-map bucket-name)
-		:else (store-op bucket-map op bucket-name)))
+	  (store-op this op bucket-name))
   (invoke [this op bucket-name key]
-	  (store-op bucket-map op bucket-name key))
+	  (store-op this op bucket-name key))
   (invoke [this op bucket-name key val]
-	  (store-op bucket-map  op bucket-name key val))
+	  (store-op this op bucket-name key val))
   (applyTo [this args]
-	   (apply store-op bucket-map args)))
+	   (apply store-op this args)))
 
 (defn flush! [^Store store]
   (doseq [[_ spec] (.bucket-map store)
@@ -127,6 +180,7 @@
        hashmap-bucket))
 
 (defn store [bucket-specs & [context]]
-  (-> (buckets bucket-specs context)
-      start-flush-pools
-      (Store. context)))
+  (let [context (or context {})]
+    (-> (buckets bucket-specs context)
+	start-flush-pools
+	(Store. context))))

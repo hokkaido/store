@@ -99,6 +99,15 @@
 	   "k4" "v4"})
 	 (sort-by first (bucket-batch-get b ["k1" "k2" "k3" "k4"]))))))
 
+(deftest rest-store-test
+  (let [s (store [] {:host "localhost"
+		     :batch-size 2
+		     :port 4445
+		     :type :rest})]
+    (s :add "b3")
+    (s :put "b3" "k1" 1)
+    (is (= 1 (s :get "b3" "k1")))))
+
 (deftest rest-bucket-test
   (let [b (rest-bucket :name "b1"
                        :host "localhost"

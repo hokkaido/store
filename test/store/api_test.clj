@@ -34,9 +34,11 @@
     (is (= 42 (s :get "b2" "k")))))
 
 (deftest store-op-test
-  (is (= 42
-	 (store-op {:k {:read {:k 42}}}
-		   :get :k :k))))
+  (let [s (store [])]
+    (s :add "b")
+    (s :put "b" :k 42)
+    (is (= 42
+	   (s :get "b" :k)))))
 
 (deftest start-flush-pools-test
   (let [b (with-merge

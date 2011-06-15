@@ -263,34 +263,3 @@
 			(bucket-get b k))))
       (bucket-batch-get [this ks] (default-bucket-batch-get this ks)))     
      b)))
-
-(def read-ops
-  {:get bucket-get
-   :batch-get bucket-batch-get
-   :seq bucket-seq
-   :bucket (fn [bucket & args] bucket)
-   :keys bucket-keys
-   :get-ensure
-   (fn [bucket key default-fn]
-     (if-let [v (bucket-get bucket key)]
-       v
-       (let [res (default-fn)]
-         (bucket-put bucket key res)
-         res)))
-   :exists? bucket-exists?
-   :modified bucket-modified})
-
-(def write-ops
-     {:put bucket-put
-      :delete bucket-delete
-      :merge bucket-merge
-      :update bucket-update
-      :sync bucket-sync
-      :close bucket-close})
-
-(defn store-op [bucket-map op name & args]
-  (let [b (if (find read-ops op)
-	    (->> name (bucket-get bucket-map) :read)
-	    (->> name (bucket-get bucket-map) :write))        
-	f (or (read-ops op) (write-ops op))]
-    (apply f b args)))

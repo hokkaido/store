@@ -2,7 +2,7 @@
   (:use store.core
         [clojure.java.io :only [file copy]]
         [clojure.contrib.shell :only [sh]]
-        [plumbing.core :only [keywordize-map]]                              
+        [plumbing.core :only [keywordize-map]]
 	[plumbing.error :only [with-ex logger]]
         [clojure.string :only [lower-case]]
 	[clojure.java.io :only [reader]]
@@ -20,10 +20,6 @@
            (java.util.concurrent Executors Future Callable TimeUnit)
            (org.apache.commons.io IOUtils)))
 
-(defn rest-response-base [status]
-  {:headers {"Content-Type" "application/json; charset=UTF-8"}   
-   :status status})
-
 (defn parse-body [^java.io.InputStream b]
   (json/parse-string (IOUtils/toString b "UTF8")))
 
@@ -33,14 +29,16 @@
      (json/generate-string data)))
 
 (defn rest-response [status op data]
-  (assoc (rest-response-base status)
-     :body (rest-response-body op data)))
+  (assoc {:headers
+	  {"Content-Type" "application/json; charset=UTF-8"}   
+	  :status status}
+    :body (rest-response-body op data)))
 
 (defn exec-request
-  [s p & args]
+  [s {:keys [op name] :as p} & args]
   (try
-    (rest-response 200 (p :op)
-		   (apply s (keyword (p :op)) (p :name) args))
+    (rest-response 200 op
+		   (apply s (keyword op) name args))
     (catch Exception e
       (log/info (format "params: %s %s" (pr-str p) (pr-str args)))
       (.printStackTrace e)
@@ -104,38 +102,47 @@
     (str/join "/"
 	(map correct-url-encode pieces))))
 
-(defn rest-bucket
-  [& {:keys [name,host,port,keywordize?,batch-size,client-ops]
-      :or {host "localhost"
-	   batch-size 10000
-	   port 4445
-	   keywordize? true}}]
-  (when (nil? name)
-    (throw (RuntimeException. "Must specify rest-bucket name")))  
+(defn mpartial [f m1]
+  (fn [m2]
+    (f (merge m1 m2))))
+
+(defn rest-call [{:keys [host port client-ops name
+			 keywordize? op as body]
+		  :or {host "localhost"
+		       port 4445
+		       keywordize? true}}]
   (let [base (format "http://%s:%d/store/"
 		     (.replaceAll host "http://" "") port)
 	get-client #(client/basic-http-client client-ops)
-        exec (fn [[op & as] & [body-arg]]
-	       (let [url (apply request-url base op name as)]
-		 (->> (exec-client-request get-client op url body-arg)
-		      (merge {:keywordize? keywordize?})
-		      (process-client-response op))))]
+	url (->>
+	     [op name as]
+	     (filter identity)
+	     (apply request-url base))]
+    (->> (exec-client-request get-client op url body)
+	 (merge {:keywordize? keywordize?})
+	 (process-client-response op))))
+
+(defn rest-bucket
+  [& {:keys [batch-size]
+      :or {batch-size 10000}
+      :as conf}]
+  (let [exec (mpartial rest-call conf)]
     (reify
      store.core.IReadBucket
-     (bucket-get [this k] (exec ["get" k]))
-     (bucket-seq [this] (exec ["seq"]))
-     (bucket-exists? [this k] (exec ["exists?" k]))
-     (bucket-keys [this] (exec ["keys"]))
+     (bucket-get [this k] (exec {:op "get" :as k}))
+     (bucket-seq [this] (exec {:op "seq"}))
+     (bucket-exists? [this k] (exec {:op "exists?" :as k}))
+     (bucket-keys [this] (exec {:op "keys"}))
      (bucket-batch-get [this ks]
        (->> ks
 	    (partition-all batch-size)
-	    (mapcat (partial exec ["batch-get"]))))
-     (bucket-modified [this k] (exec ["modified" k]))
+	    (mapcat (fn [p] (exec {:op "batch-get" :body p})))))
+     (bucket-modified [this k] (exec {:op "modified" :as k}))
 
      store.core.IWriteBucket
-     (bucket-put [this k v] (exec ["put" k] v))
-     (bucket-delete [this k] (exec ["delete" k]))
+     (bucket-put [this k v] (exec {:op "put" :as k :body v}))
+     (bucket-delete [this k] (exec {:op "delete" :as k}))
      (bucket-update [this k f] (default-bucket-update this k f))
-     (bucket-merge [this k v] (exec ["merge" k] v))
+     (bucket-merge [this k v] (exec {:op "merge" :as k :body v}))
      (bucket-close [this])
-     (bucket-sync [this] (exec ["sync"])))))
+     (bucket-sync [this] (exec {:op "sync"})))))
