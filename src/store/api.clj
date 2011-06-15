@@ -4,11 +4,13 @@
 	[plumbing.error :only [with-ex logger]]
 	store.core
 	store.net
-	store.bdb)
+	store.bdb
+        store.s3
+        )
   (:import [java.util.concurrent Executors TimeUnit
 	    ConcurrentHashMap]))
 
-(defn raw-bucket [{:keys [name type db-env host port path]
+(defn raw-bucket [{:keys [name type db-env host port path prefix]
 		   :or {type :mem}
 		   :as opts}]
   (case type
@@ -19,6 +21,7 @@
 	:fs (fs-bucket path name)
 	:mem (hashmap-bucket)
 	:rest (apply rest-bucket (apply concat opts))
+        :s3   (s3-bucket (s3-connection opts) (str prefix name))
 	(throw (java.lang.Exception.
 		(format "bucket type %s does not exist." type)))))
 
