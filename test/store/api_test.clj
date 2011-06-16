@@ -41,20 +41,15 @@
 	   (s :get "b" :k)))))
 
 (deftest start-flush-pools-test
-  (let [b (with-merge
-	     (hashmap-bucket)
-	     (fn [_ sum x] (+ (or sum 0) x)))
-	bs (start-flush-pools
-	    {"b" {:write-spec {:flush (fn [_ sum x] (+ (or sum 0) x)) :flush-freq 2}
-		  :write b
-		  :read b}})
-	s (store.api.Store. bs {})]
+  (let [s (store ["b"] {:flush (fn [_ sum x] (+ (or sum 0) x))
+			:flush-freq 1})
+	b (bucket-get (.bucket-map s) "b")]
     (s :merge "b" "k" 42)
     (Thread/sleep 2000)
     (is (= 42 (s :get "b" "k")))
     (shutdown s)
     (Thread/sleep 1000)
-    (is (.isShutdown (:flush-pool (bucket-get bs "b"))))))
+    (is (.isShutdown (:flush-pool b)))))
 
 (deftest store-with-dynamic-bucket
   (let [s (store [{:name "foo"

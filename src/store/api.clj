@@ -146,7 +146,7 @@
 	   (apply store-op this args)))
 
 (defn flush! [^Store store]
-  (doseq [[_ spec] (.bucket-map store)
+  (doseq [[_ spec] (bucket-seq (.bucket-map store))
 	  :when (-> spec :write-spec :flush)]
     (bucket-sync (:write spec))))
 
