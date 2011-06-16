@@ -12,12 +12,7 @@
 
 (use-fixtures :each
               (fn [f]
-                (let [handlers (rest-store-handler
-				(store ["b1" "b2"]))
-		      server (run-jetty
-			      (apply routes handlers)
-			      {:port 4445
-			       :join? false})]
+                (let [server (store-server (store ["b1" "b2"]))]
                   (f)
                   (.stop server))))
 

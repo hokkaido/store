@@ -220,7 +220,6 @@
   (let [db-conf (bdb-conf read-only deferred-write cache-mode)]
     (.openDatabase env nil name db-conf)))
 
-
 (defn bdb-bucket
   "returns callback fn for a Berkeley DB backed bucket."
   [^Database db]

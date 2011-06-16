@@ -5,8 +5,7 @@
 	store.core
 	store.net
 	store.bdb
-        store.s3
-        )
+        store.s3)
   (:import [java.util.concurrent Executors TimeUnit
 	    ConcurrentHashMap]))
 
@@ -119,18 +118,21 @@
 			     :op "remove"
 			     :name bucket-name)))})
 
+;;TODO: bad semantics to return nil for all operations otehr than reads.  The right thing to do is polymorphic behavior based on type of store, but dealing with the issue at the net store level creates even worse hacks than this.  #HACK deones the hacks.
 (defn store-op [store op name & args]
   (if (find bucket-ops op)
     (let [{:keys [type]} (.context store)]
       (when (= type :rest)
 	((op rest-bucket-ops) store name))
-      ((op bucket-ops) store name))
+      ((op bucket-ops) store name)
+      nil) ;; #hack
     (let [read (read-ops op)
 	  spec (->> name (bucket-get (.bucket-map store)))
 	  b (if read (:read spec)
 		(:write spec))
-	  f (or read (write-ops op))]
-      (apply f b args))))
+	  f (or read (write-ops op))
+	  res (apply f b args)]
+      (when read res)))) ;;#hack
 
 (deftype Store [bucket-map context]
   clojure.lang.IFn

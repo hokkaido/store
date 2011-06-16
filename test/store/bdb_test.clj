@@ -8,7 +8,7 @@
 	[plumbing.core :only [find-first]])
   (:import (com.sleepycat.je PreloadConfig)))
 
-(defn- ensure-test-directory []
+(defn ensure-test-directory []
   (delete-file-recursively (java.io.File. "/tmp/bdbtest") true)
   (make-parents (java.io.File. "/tmp/bdbtest/ping"))
   (delete-file (java.io.File.  "/tmp/bdbtest/ping") true))

@@ -37,8 +37,7 @@
 (defn exec-request
   [s {:keys [op name] :as p} & args]
   (try
-    (rest-response 200 op
-		   (apply s (keyword op) name args))
+    (rest-response 200 op (apply s (keyword op) name args))
     (catch Exception e
       (log/info (format "params: %s %s" (pr-str p) (pr-str args)))
       (.printStackTrace e)
@@ -62,6 +61,13 @@
 	    p
 	    (url-decode (p :key))
 	    (parse-body b)))]))
+
+(defn store-server [s]
+  (-> s
+      rest-store-handler
+      ((fn [x] (apply routes x)))
+      (run-jetty {:port 4445
+		  :join? false})))
 
 ;; url (str base (str/join "/" (concat [op name] as)))
 (defn exec-client-request [get-client op url & [body-arg]]
