@@ -10,6 +10,7 @@
                  [com.sleepycat/je "4.1.7"]
                  [commons-io "2.0.1"]
                  [compojure "0.6.1"]
+		 [services "0.0.1-SNAPSHOT"]
                  [ring/ring-core "0.3.7"]
                  [ring/ring-jetty-adapter "0.3.7"]
                  [clj-time "0.4.0-SNAPSHOT"]]

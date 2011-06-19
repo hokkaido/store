@@ -99,24 +99,52 @@
 		     :batch-size 2
 		     :port 4445
 		     :type :rest})]
+
     (s :add "b3")
     (s :put "b3" "k1" 1)
     (is (= 1 (s :get "b3" "k1")))))
 
-(deftest rest-bucket-test
+(deftest rest-client-keywords-test
   (let [b (rest-bucket :name "b1"
                        :host "localhost"
 		       :batch-size 2
                        :port 4445)
 	body (fetcher.core/fetch :get "http://www.google.com")
 	pool (java.util.concurrent.Executors/newFixedThreadPool 100)
-	tasks (range 1000)
+	tasks (range 10)
 	latch (java.util.concurrent.CountDownLatch. (count tasks))]
     (doseq [x tasks]
       (.submit pool
 	       (cast Runnable
-		     #(do (bucket-put b (str x) (:body body))
+		     #(do (bucket-put b
+				      (str "http://www.google.com" x)
+				      body)
 			  (.countDown latch)))))
     (.await latch)
     (.shutdown pool)
-    (is (= 1000 (count (bucket-keys b))))))
+    (let [ks (keys (bucket-get b "http://www.google.com0"))]
+      (is (empty? (remove keyword? ks))))
+    (is (= 10 (count (bucket-keys b))))))
+
+(deftest rest-client-strings-test
+  (let [b (rest-bucket :name "b1"
+                       :host "localhost"
+		       :batch-size 2
+                       :port 4445
+		       :keywordize? false)
+	body (fetcher.core/fetch :get "http://www.google.com")
+	pool (java.util.concurrent.Executors/newFixedThreadPool 100)
+	tasks (range 10)
+	latch (java.util.concurrent.CountDownLatch. (count tasks))]
+    (doseq [x tasks]
+      (.submit pool
+	       (cast Runnable
+		     #(do (bucket-put b
+				      (str "http://www.google.com" x)
+				      body)
+			  (.countDown latch)))))
+    (.await latch)
+    (.shutdown pool)
+    (let [ks (keys (bucket-get b "http://www.google.com0"))]
+      (is (empty? (remove string? ks))))
+    (is (= 10 (count (bucket-keys b))))))
