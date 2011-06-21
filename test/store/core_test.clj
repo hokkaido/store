@@ -32,7 +32,7 @@
     (is (empty? (s :keys "b1")))
     (s :put "b2" "k2" {:a 1})
     (is (= [["k2" {:a 1}]] (s :seq "b2")))
-    (is (= [["k2" {:a 1}]] (bucket-seq (s :bucket "b2"))))
+    (is (= [["k2" {:a 1}]] (bucket-seq (:read (s :bucket "b2")))))
     (is (= 1 (:a (s :get "b2" "k2"))))
     (s :update "b1" "k-count" (fnil inc 0))
     (is (= (s :get "b1" "k-count") 1))))

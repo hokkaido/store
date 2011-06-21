@@ -76,7 +76,6 @@
   {:get bucket-get
    :batch-get bucket-batch-get
    :seq bucket-seq
-   :bucket (fn [bucket & args] bucket)
    :keys bucket-keys
    :get-ensure
    (fn [bucket key default-fn]
@@ -97,7 +96,9 @@
       :close bucket-close})
 
 (def bucket-ops
-     {:add (fn [store bucket-name]
+     {:bucket (fn [store bucket-name]
+		(bucket-get (.bucket-map store) bucket-name))
+      :add (fn [store bucket-name]
 	     (let [bucket (create-buckets (assoc (.context store)
 					    :name bucket-name))]
 	       (bucket-put
@@ -108,24 +109,24 @@
 		(bucket-delete
 		 (.bucket-map store) bucket-name))})
 
-(def rest-bucket-ops
-     {:add (fn [store bucket-name]
-	     (rest-call (assoc (.context store)
+(defn rest-op [op store bucket-name]
+  (rest-call (assoc (.context store)
 			  :op "add"
 			  :name bucket-name)))
-      :remove (fn [store bucket-name]
-		(rest-call (assoc (.context store)
-			     :op "remove"
-			     :name bucket-name)))})
+
+(def rest-bucket-ops
+     {:add (partial rest-op "add")
+      :remove (partial rest-op "remove")
+      :bucket (partial rest-op "bucket")})
 
 ;;TODO: bad semantics to return nil for all operations otehr than reads.  The right thing to do is polymorphic behavior based on type of store, but dealing with the issue at the net store level creates even worse hacks than this.  #HACK deones the hacks.
 (defn store-op [store op name & args]
   (if (find bucket-ops op)
     (let [{:keys [type]} (.context store)]
       (when (= type :rest)
-	((op rest-bucket-ops) store name))
-      ((op bucket-ops) store name)
-      nil) ;; #hack to return nil for writes
+	((op rest-bucket-ops) store name)
+	nil)
+      ((op bucket-ops) store name))
     (let [read (read-ops op)
 	  spec (->> name (bucket-get (.bucket-map store)))
 	  b (if read (:read spec)
