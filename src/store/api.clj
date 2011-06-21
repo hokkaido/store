@@ -125,14 +125,17 @@
       (when (= type :rest)
 	((op rest-bucket-ops) store name))
       ((op bucket-ops) store name)
-      nil) ;; #hack
+      nil) ;; #hack to return nil for writes
     (let [read (read-ops op)
 	  spec (->> name (bucket-get (.bucket-map store)))
 	  b (if read (:read spec)
 		(:write spec))
-	  f (or read (write-ops op))
-	  res (apply f b args)]
-      (when read res)))) ;;#hack
+	  f (or read (write-ops op))]
+      (when-not f
+	(let [read-or-write (if read "read" "write")]
+	  (throw (Exception. (format "No %s operation for bucket %s" read-or-write name)))))
+      (let [res (apply f b args)]
+	(when read res))))) ;;#hack to return nil for writes
 
 (deftype Store [bucket-map context]
   clojure.lang.IFn
