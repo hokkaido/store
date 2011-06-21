@@ -131,7 +131,7 @@
 	  b (if read (:read spec)
 		(:write spec))
 	  f (or read (write-ops op))]
-      (when-not f
+      (when-not b
 	(let [read-or-write (if read "read" "write")]
 	  (throw (Exception. (format "No %s operation for bucket %s" read-or-write name)))))
       (let [res (apply f b args)]
