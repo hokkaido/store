@@ -20,13 +20,89 @@
            (java.util.concurrent Executors Future Callable TimeUnit)
            (org.apache.commons.io IOUtils)))
 
+
+(defn correct-url-encode [k]
+  (-> k url-encode (.replaceAll "\\." "%2e")))
+
+(defn request-url [base & pieces]
+  (str base
+    (str/join "/"
+	(map correct-url-encode pieces))))
+
+(defn mpartial [f m1]
+  (fn [m2]
+    (f (merge m1 m2))))
+
+;; url (str base (str/join "/" (concat [op name] as)))
+(defn exec-client-request [get-client op url & [body-arg]]
+  (if-not body-arg
+    (client/fetch get-client
+		  :get
+		  {:url url
+		   :as (if (#{"keys" "seq"} op)
+			 :input-stream
+			 :string)})				    
+    (client/fetch get-client
+                  :post 
+		  {:url url
+		   :body (.getBytes
+			  (json/generate-string body-arg)
+			  "UTF8")})))
+
+(defn process-client-response
+  [op {:keys [status,body,keywordize?]
+       :or {keywordize? true}
+       :as resp}]
+  (if (= status 200)                                   
+    (if (#{"keys" "seq"} op)
+      (-> ^java.io.InputStream body
+	  java.io.InputStreamReader.
+	  java.io.BufferedReader.
+	  (json/parsed-seq keywordize?))
+      (json/parse-string body keywordize?))
+    (throw (RuntimeException.
+	    (format "Rest bucket server error: %s"
+		    resp)))))
+
+(defn rest-call [{:keys [host port client-ops name
+			 keywordize? op as body]
+		  :or {host "localhost"
+		       port 4445
+		       keywordize? true}}]
+  (let [base (format "http://%s:%d/store/"
+		     (.replaceAll host "http://" "") port)
+	get-client #(client/basic-http-client client-ops)
+	url (->>
+	     [op name as]
+	     (filter identity)
+	     (apply request-url base))]
+    (->> (exec-client-request get-client op url body)
+	 (merge {:keywordize? keywordize?})
+	 (process-client-response op))))
+
+
+(defn rest-op [op store bucket-name]
+  (rest-call (assoc (.context store)
+			  :op "add"
+			  :name bucket-name)))
+
+(def rest-bucket-ops
+     {:add (partial rest-op "add")
+      :remove (partial rest-op "remove")
+      :bucket (partial rest-op "bucket")})
+
 (defn parse-body [^java.io.InputStream b]
   (json/parse-string (IOUtils/toString b "UTF8")))
 
 (defn rest-response-body [op data]
-  (case op
-     ("keys" "seq") (map json/generate-string data)
-     (json/generate-string data)))
+  (let [op (keyword op)]
+    (cond (streaming-ops op)
+	  (map json/generate-string data)
+	  (or (write-ops op)
+	      (rest-bucket-ops op))
+	  (json/generate-string (if data "SUCCESS" nil))
+	  :else
+	  (json/generate-string data))))
 
 (defn rest-response [status op data]
   (assoc {:headers
@@ -68,65 +144,6 @@
       ((fn [x] (apply routes x)))
       (run-jetty {:port 4445
 		  :join? false})))
-
-;; url (str base (str/join "/" (concat [op name] as)))
-(defn exec-client-request [get-client op url & [body-arg]]
-  (if-not body-arg
-    (client/fetch get-client
-		  :get
-		  {:url url
-		   :as (if (#{"keys" "seq"} op)
-			 :input-stream
-			 :string)})				    
-    (client/fetch get-client
-                  :post 
-		  {:url url
-		   :body (.getBytes
-			  (json/generate-string body-arg)
-			  "UTF8")})))
-
-(defn process-client-response
-  [op {:keys [status,body,keywordize?]
-       :or {keywordize? true}
-       :as resp}]
-  (if (= status 200)                                   
-    (if (#{"keys" "seq"} op)
-      (-> ^java.io.InputStream body
-	  java.io.InputStreamReader.
-	  java.io.BufferedReader.
-	  (json/parsed-seq keywordize?))
-      (json/parse-string body keywordize?))
-    (throw (RuntimeException.
-	    (format "Rest bucket server error: %s"
-		    resp)))))
-
-(defn correct-url-encode [k]
-  (-> k url-encode (.replaceAll "\\." "%2e")))
-
-(defn request-url [base & pieces]
-  (str base
-    (str/join "/"
-	(map correct-url-encode pieces))))
-
-(defn mpartial [f m1]
-  (fn [m2]
-    (f (merge m1 m2))))
-
-(defn rest-call [{:keys [host port client-ops name
-			 keywordize? op as body]
-		  :or {host "localhost"
-		       port 4445
-		       keywordize? true}}]
-  (let [base (format "http://%s:%d/store/"
-		     (.replaceAll host "http://" "") port)
-	get-client #(client/basic-http-client client-ops)
-	url (->>
-	     [op name as]
-	     (filter identity)
-	     (apply request-url base))]
-    (->> (exec-client-request get-client op url body)
-	 (merge {:keywordize? keywordize?})
-	 (process-client-response op))))
 
 (defn rest-bucket
   [& {:keys [batch-size]

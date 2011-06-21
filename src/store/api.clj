@@ -72,29 +72,6 @@
        (ConcurrentHashMap.)
        hashmap-bucket))
 
-(def read-ops
-  {:get bucket-get
-   :batch-get bucket-batch-get
-   :seq bucket-seq
-   :keys bucket-keys
-   :get-ensure
-   (fn [bucket key default-fn]
-     (if-let [v (bucket-get bucket key)]
-       v
-       (let [res (default-fn)]
-         (bucket-put bucket key res)
-         res)))
-   :exists? bucket-exists?
-   :modified bucket-modified})
-
-(def write-ops
-     {:put bucket-put
-      :delete bucket-delete
-      :merge bucket-merge
-      :update bucket-update
-      :sync bucket-sync
-      :close bucket-close})
-
 (def bucket-ops
      {:bucket (fn [store bucket-name]
 		(bucket-get (.bucket-map store) bucket-name))
@@ -109,23 +86,11 @@
 		(bucket-delete
 		 (.bucket-map store) bucket-name))})
 
-(defn rest-op [op store bucket-name]
-  (rest-call (assoc (.context store)
-			  :op "add"
-			  :name bucket-name)))
-
-(def rest-bucket-ops
-     {:add (partial rest-op "add")
-      :remove (partial rest-op "remove")
-      :bucket (partial rest-op "bucket")})
-
-;;TODO: bad semantics to return nil for all operations otehr than reads.  The right thing to do is polymorphic behavior based on type of store, but dealing with the issue at the net store level creates even worse hacks than this.  #HACK deones the hacks.
 (defn store-op [store op name & args]
   (if (find bucket-ops op)
     (let [{:keys [type]} (.context store)]
       (when (= type :rest)
-	((op rest-bucket-ops) store name)
-	nil)
+	((op rest-bucket-ops) store name))
       ((op bucket-ops) store name))
     (let [read (read-ops op)
 	  spec (->> name (bucket-get (.bucket-map store)))
@@ -135,8 +100,7 @@
       (when-not b
 	(let [read-or-write (if read "read" "write")]
 	  (throw (Exception. (format "No %s operation for bucket %s" read-or-write name)))))
-      (let [res (apply f b args)]
-	(when read res))))) ;;#hack to return nil for writes
+      (apply f b args))))
 
 (deftype Store [bucket-map context]
   clojure.lang.IFn
