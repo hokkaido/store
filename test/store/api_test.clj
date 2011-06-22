@@ -27,7 +27,8 @@
 (deftest store-final-flush-test
   (let [s (store
 	   [{:name "b2"
-	     :flush (fn [_ sum x] (+ (or sum 0) x))}])]
+	     :flush true
+	     :merge (fn [_ sum x] (+ (or sum 0) x))}])]
     (s :merge "b2" "k" 42)
     (is (nil? (s :get "b2" "k")))
     (s :sync "b2")
@@ -41,7 +42,8 @@
 	   (s :get "b" :k)))))
 
 (deftest start-flush-pools-test
-  (let [s (store ["b"] {:flush (fn [_ sum x] (+ (or sum 0) x))
+  (let [s (store ["b"] {:merge (fn [_ sum x] (+ (or sum 0) x))
+			:flush true
 			:flush-freq 1})
 	b (bucket-get (.bucket-map s) "b")]
     (s :merge "b" "k" 42)

@@ -33,11 +33,7 @@
   [{:keys [merge,flush] :as spec}]
   (-> (raw-bucket spec)
       (?> merge with-merge merge)
-      ;;WARNING!!!
-      ;;super ghetto skullfuck.
-      ;;need to add flush fn as merge fn and flush fn 
-      (?> flush with-merge flush)
-      (?> flush add-flush flush)))
+      (?> flush add-flush merge)))
 
 (defn add-context [context spec]
   (if-not context

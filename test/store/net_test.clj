@@ -12,7 +12,10 @@
 
 (use-fixtures :each
               (fn [f]
-                (let [server (store-server (store ["b1" "b2"]))]
+                (let [server (store-server
+			      (store ["b1" "b2"]
+				     {:merge (fn [_ x y]
+					       (+ (or x 0) y))}))]
                   (f)
                   (.stop server))))
 
@@ -77,7 +80,7 @@
     (is (= [["k2",2]] (bucket-seq b)))
     (is (nil? (bucket-get b "dne")))
 
-    (bucket-update b "k2" inc)
+    (bucket-merge b "k2" 1)
     (is (= (bucket-get b "k2") 3))
 
     (bucket-put b "k3" {:a 1})

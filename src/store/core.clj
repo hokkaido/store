@@ -234,9 +234,9 @@
   ([b]
      (with-flush b (bucket-merger
                     (if (coll? b) (first b) b))))
-  ([bucket flush-merge-fn]
+  ([bucket merge-fn]
      (let [buckets (if (coll? bucket) bucket [bucket])
-           mem-bucket (with-merge (hashmap-bucket) flush-merge-fn)
+           mem-bucket (with-merge (hashmap-bucket) merge-fn)
            do-flush! #(bucket-flush-to! mem-bucket buckets)]
        (reify
 	store.core.IWriteBucket

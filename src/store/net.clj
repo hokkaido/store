@@ -80,7 +80,6 @@
 	 (merge {:keywordize? keywordize?})
 	 (process-client-response op))))
 
-
 (defn rest-op [op store bucket-name]
   (rest-call (assoc (.context store)
 			  :op "add"
@@ -111,13 +110,15 @@
     :body (rest-response-body op data)))
 
 (defn exec-request
-  [s {:keys [op name] :as p} & args]
-  (try
-    (rest-response 200 op (apply s (keyword op) name args))
-    (catch Exception e
-      (log/info (format "params: %s %s" (pr-str p) (pr-str args)))
-      (.printStackTrace e)
-      (rest-response 500 nil {:error (str e)}))))
+  [s p & args]
+  (let [o (p :op)
+	n (p :name)]
+    (try
+      (rest-response 200 o (apply s (keyword o) n args))
+      (catch Exception e
+	(log/info (format "params: %s %s" (pr-str p) (pr-str args)))
+	(.printStackTrace e)
+	(rest-response 500 nil {:error (str e)})))))
 
 (defn rest-store-handler [s]
   (let [exec-req (partial with-ex (logger) exec-request s)]
@@ -165,7 +166,9 @@
      store.core.IWriteBucket
      (bucket-put [this k v] (exec {:op "put" :as k :body v}))
      (bucket-delete [this k] (exec {:op "delete" :as k}))
-     (bucket-update [this k f] (default-bucket-update this k f))
-     (bucket-merge [this k v] (exec {:op "merge" :as k :body v}))
+     (bucket-update [this k f]
+		    (throw (Exception. (format "can not call update on rest bucket %s with key: %s and update fn: %s" this k f))))
+     (bucket-merge [this k v]
+		   (exec {:op "merge" :as k :body v}))
      (bucket-close [this])
      (bucket-sync [this] (exec {:op "sync"})))))

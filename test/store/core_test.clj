@@ -99,8 +99,9 @@
 	   (into {} (bucket-seq b2))))))
 
 (deftest with-flush-test
-  (let [b1 (with-merge (hashmap-bucket) (fnil (fn [_ v1 v2] (merge v1 v2)) {}))
-	b2 (with-flush b1)]
+  (let [merge (fnil (fn [_ v1 v2] (merge v1 v2)) {})
+	b1 (with-merge (hashmap-bucket) merge)
+	b2 (with-flush b1 merge)]
     (bucket-merge b2 "k" {"v1" "v"})
     (is (nil? (bucket-get b1 "k")))
     (bucket-sync b2)
@@ -157,7 +158,8 @@
     (is (= (bucket-get b2 "k1") "v1"))))
 
 (deftest store-flush-test
-  (let [s (store [{:name "b" :flush  (fn [_ old new] (+ (or old 0) new))
+  (let [s (store [{:name "b"
+		   :flush true
 		   :merge (fn [_ old new] (+ (or old 0) new))}
 		  "b1"]
 		 {:type :mem})]
@@ -180,22 +182,3 @@
 				     (.countDown latch)))))
     (.await latch)
     (bucket-get b "k")))
-
-
-
-#_(deftest bucket-counting-flush-test
-  (let [n 100000
-	b (with-merge
-	    (hashmap-bucket)
-	    (fn [_ sum x] (+ (or sum 0) x)))
-	b (with-reading-flush b [b])
-	pool (java.util.concurrent.Executors/newFixedThreadPool 1000)
-	latch (java.util.concurrent.CountDownLatch. n)]
-    (dotimes [_ n]
-      (.submit pool (cast Runnable (fn []
-				     (bucket-merge b "k" 1)
-				     (bucket-sync b)
-				     (.countDown latch)))))
-    (.await latch)
-    (.shutdownNow pool)
-    (is (= n (bucket-get b "k")))))
