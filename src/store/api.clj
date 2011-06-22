@@ -30,9 +30,9 @@
    (with-flush bucket flush)))
 
 (defn bucket
-  [{:keys [merge,flush] :as spec}]
+  [{:keys [merge,flush,type] :as spec}]
   (-> (raw-bucket spec)
-      (?> merge with-merge merge)
+      (?> (and merge (not= :rest type)) with-merge merge)
       (?> flush add-flush merge)))
 
 (defn add-context [context spec]
