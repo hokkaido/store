@@ -155,3 +155,6 @@
     (-> (buckets bucket-specs context)
 	start-flush-pools
 	(Store. context))))
+
+(defn clone [s & [context]]
+  (store (bucket-keys (.bucket-map s)) context))
