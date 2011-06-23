@@ -139,11 +139,12 @@
 	    (url-decode (p :key))
 	    (parse-body b)))]))
 
-(defn store-server [s]
+(defn store-server [s & {:keys [port]
+			 :or {port 4445}}]
   (-> s
       rest-store-handler
       ((fn [x] (apply routes x)))
-      (run-jetty {:port 4445
+      (run-jetty {:port port
 		  :join? false})))
 
 (defn rest-bucket
