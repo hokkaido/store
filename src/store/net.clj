@@ -82,7 +82,7 @@
 
 (defn rest-op [op store bucket-name]
   (rest-call (assoc (.context store)
-			  :op "add"
+			  :op op
 			  :name bucket-name)))
 
 (def rest-bucket-ops

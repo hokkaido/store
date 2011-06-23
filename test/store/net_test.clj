@@ -105,7 +105,10 @@
 
     (s :add "b3")
     (s :put "b3" "k1" 1)
-    (is (= 1 (s :get "b3" "k1")))))
+    (is (= 1 (s :get "b3" "k1")))
+    (is (s :bucket "b3"))
+    (s :remove "b3")
+    (is (not (s :bucket "b3")))))
 
 (deftest rest-client-keywords-test
   (let [b (rest-bucket :name "b1"

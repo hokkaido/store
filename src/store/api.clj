@@ -94,6 +94,8 @@
 		(:write spec))
 	  f (or read (write-ops op))]
       (when-not b
+	(when-not spec
+	  (throw (Exception. (format "No bucket %s" name))))
 	(let [read-or-write (if read "read" "write")]
 	  (throw (Exception. (format "No %s operation for bucket %s" read-or-write name)))))
       (apply f b args))))
