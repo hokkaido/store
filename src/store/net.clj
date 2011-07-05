@@ -8,6 +8,7 @@
 	[clojure.java.io :only [reader]]
 	[compojure.core :only [GET POST routes]]
 	[ring.adapter.jetty :only [run-jetty]]
+	[services.core :only [start-web]]
         [ring.util.codec :only [url-decode url-encode]])
   (:require [clojure.string :as str]
             [clj-json.core :as json]
@@ -162,10 +163,8 @@
 			 :or {port 4445}}]
   (-> s
       rest-store-handler
-      ((fn [x] (apply routes x)))
-      (run-jetty {:port port
-		  :join? false})))
-
+      (start-web {:port port :join? false})))
+		  
 (defn rest-bucket
   [& {:keys [batch-size]
       :or {batch-size 10000}

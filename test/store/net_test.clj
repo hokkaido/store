@@ -24,6 +24,12 @@
       :port 4445
       :type :rest})
 
+(deftest fetch-test
+  (is (= "text/javascript; charset=UTF-8"
+       (-> (fetcher.core/fetch :get "http://localhost:4445/store/get/b1/k?_callback=x")
+	   :headers
+	   (get "content-type")))))
+
 (deftest exec-req-test
   (let [s (store [{:name "hm"
 		   :merge (fn [_ x y] (+ (or x 0) y))}
