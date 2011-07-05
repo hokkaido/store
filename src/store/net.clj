@@ -117,12 +117,21 @@
 	  :status status}
     :body (rest-response-body op data)))
 
+(defn jsonp-response [callback data]
+  {:status 200
+   :headers {"Content-Type" "text/javascript; charset=UTF-8"}
+   :body (str callback "(" (json/generate-string data) ")")})
+
 (defn exec-request
   [s p & args]
   (let [o (p :op)
-	n (p :name)]
+	n (p :name)
+	callback (p :_callback)]
     (try
-      (rest-response 200 o (apply s (keyword o) n args))
+      (let [data (apply s (keyword o) n args)]
+	(if callback
+	  (jsonp-response callback data)
+	  (rest-response 200 o data)))
       (catch Exception e
 	(log/info (format "params: %s %s" (pr-str p) (pr-str args)))
 	(.printStackTrace e)
