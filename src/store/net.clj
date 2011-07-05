@@ -126,7 +126,7 @@
   [s p & args]
   (let [o (p :op)
 	n (p :name)
-	callback (p :_callback)]
+	callback (p "_callback")]
     (try
       (let [data (apply s (keyword o) n args)]
 	(if callback
