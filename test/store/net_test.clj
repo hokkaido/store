@@ -19,6 +19,11 @@
                   (f)
                   (.stop server))))
 
+(def rest-spec
+     {:host "localhost"
+      :port 4445
+      :type :rest})
+
 (deftest exec-req-test
   (let [s (store [{:name "hm"
 		   :merge (fn [_ x y] (+ (or x 0) y))}
@@ -98,24 +103,27 @@
 	 (sort-by first (bucket-batch-get b ["k1" "k2" "k3" "k4"]))))))
 
 (deftest rest-store-test
-  (let [s (store [] {:host "localhost"
-		     :batch-size 2
-		     :port 4445
-		     :type :rest})]
-
+  (let [s (store [] rest-spec)]
     (s :add "b3")
     (s :put "b3" "k1" 1)
     (is (= 1 (s :get "b3" "k1")))
     (is (s :bucket "b3"))
     (s :remove "b1")
     (s :remove "b2")
-    (let [other (store [] {:host "localhost"
-		     :port 4445
-		     :type :rest})]
-      (is (= ["b3"] (other :buckets))))
+    (let [other (store [] rest-spec)]
+      (is (= ["b3"] (other :buckets)))
 
-    (s :remove "b3")
-    (is (not (s :bucket "b3")))))
+      (s :remove "b3")
+      (is (not (s :bucket "b3")))
+      (is (empty? (other :buckets))))))
+
+(deftest mirror-remote-store-test
+  (let [s1 (mirror-remote rest-spec)
+	s2 (mirror-remote rest-spec)]
+    (is (= ["b1" "b2"] (sort  (s1 :buckets))))
+      (s2 :remove "b2")
+      (is (not (s1 :bucket "b2")))
+      (is (= ["b1"] (s1 :buckets)))))
 
 (deftest rest-client-keywords-test
   (let [b (rest-bucket :name "b1"

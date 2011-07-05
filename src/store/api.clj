@@ -162,3 +162,8 @@
 
 (defn clone [s & [context]]
   (store (bucket-keys (.bucket-map s)) context))
+
+(defn mirror-remote [spec]
+  (let [s (store [] spec)
+	ks (s :buckets)]
+    (store ks spec)))
