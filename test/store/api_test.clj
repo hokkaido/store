@@ -68,6 +68,7 @@
 (deftest store-clone-test
   (let [s (store ["foo" "bar"])]
     (s :put "foo" :a 1)
+    (is (= ["foo" "bar"] (s :buckets)))
     (= 1 (s :get "foo" :a))
     (let [c (clone s)]
       (c :put "bar" :b 2)

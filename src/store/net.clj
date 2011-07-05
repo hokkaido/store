@@ -88,10 +88,18 @@
 (def rest-bucket-ops
      {:add (partial rest-op "add")
       :remove (partial rest-op "remove")
-      :bucket (partial rest-op "bucket")})
+      :bucket (partial rest-op "bucket")
+      :buckets (partial rest-op "buckets")})
 
 (defn parse-body [^java.io.InputStream b]
   (json/parse-string (IOUtils/toString b "UTF8")))
+
+(defn to-json [data]
+  (if-not data (json/generate-string nil)
+	(try
+	  (json/generate-string data)
+	  ;;hack: can't serialize, so just tell the fuckers it worked.
+	  (catch Exception e (json/generate-string "SUCCESS")))))
 
 (defn rest-response-body [op data]
   (let [op (keyword op)]
@@ -99,7 +107,7 @@
 	  (map json/generate-string data)
 	  (or (write-ops op)
 	      (rest-bucket-ops op))
-	  (json/generate-string (if data "SUCCESS" nil))
+	  (to-json data)
 	  :else
 	  (json/generate-string data))))
 
@@ -122,7 +130,9 @@
 
 (defn rest-store-handler [s]
   (let [exec-req (partial with-ex (logger) exec-request s)]
-    [ ;; seq, keys, sync, close    
+    [ ;; seq, keys, sync, close
+     (GET "/store/:op" {p :params}
+	  (exec-req p))
      (GET "/store/:op/:name" {p :params}
 	  (exec-req p))
      ;; batch-get

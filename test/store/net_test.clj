@@ -107,6 +107,13 @@
     (s :put "b3" "k1" 1)
     (is (= 1 (s :get "b3" "k1")))
     (is (s :bucket "b3"))
+    (s :remove "b1")
+    (s :remove "b2")
+    (let [other (store [] {:host "localhost"
+		     :port 4445
+		     :type :rest})]
+      (is (= ["b3"] (other :buckets))))
+
     (s :remove "b3")
     (is (not (s :bucket "b3")))))
 

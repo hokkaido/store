@@ -69,7 +69,9 @@
        hashmap-bucket))
 
 (def bucket-ops
-     {:bucket (fn [store bucket-name]
+     {:buckets (fn [store name]  ;;HACK, don't need name.  just puinting until we do api overahul.
+		(bucket-keys (.bucket-map store)))
+      :bucket (fn [store bucket-name]
 		(bucket-get (.bucket-map store) bucket-name))
       :add (fn [store bucket-name]
 	     (let [bucket (create-buckets (assoc (.context store)
@@ -84,10 +86,10 @@
 
 (defn store-op [store op name & args]
   (if (find bucket-ops op)
-    (let [{:keys [type]} (.context store)]
-      (when (= type :rest)
-	((op rest-bucket-ops) store name))
-      ((op bucket-ops) store name))
+    (let [{:keys [type]} (.context store)
+	  local ((op bucket-ops) store name)]
+      (if-not (= type :rest) local
+	((op rest-bucket-ops) store name)))
     (let [read (read-ops op)
 	  spec (->> name (bucket-get (.bucket-map store)))
 	  b (if read (:read spec)
@@ -102,6 +104,8 @@
 
 (deftype Store [bucket-map context]
   clojure.lang.IFn
+   (invoke [this op]
+	  (store-op this op nil))
   (invoke [this op bucket-name]
 	  (store-op this op bucket-name))
   (invoke [this op bucket-name key]
