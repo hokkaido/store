@@ -26,7 +26,7 @@
 
 (deftest fetch-test
   (is (= "text/javascript; charset=UTF-8"
-       (-> (fetcher.core/fetch :get "http://localhost:4445/store/get/b1/k?_callback=x")
+       (-> (fetcher.core/fetch :get "http://localhost:4445/store/get/b1/k?callback=x")
 	   :headers
 	   (get "content-type")))))
 
@@ -48,13 +48,13 @@
     (is (= {:body "callback(42)"
 	    :headers {"Content-Type" "text/javascript; charset=UTF-8"}
 	    :status 200}
-	   (exec-request s {:name "hm" :op "get" "_callback" "callback"} "k1")))
+	   (exec-request s {:name "hm" :op "get" "callback" "callback"} "k1")))
 
 
     (is (= {:body "callback([[\"k1\",42]])"
 	    :headers {"Content-Type" "text/javascript; charset=UTF-8"}
 	    :status 200}
-	   (exec-request s {:name "hm" :op "seq" "_callback" "callback"})))
+	   (exec-request s {:name "hm" :op "seq" "callback" "callback"})))
 
     
     (exec-request s {:name "hm" :op "put"} "k2" 42)
