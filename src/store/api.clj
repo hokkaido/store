@@ -84,23 +84,25 @@
 		(bucket-delete
 		 (.bucket-map store) bucket-name))})
 
-(defn store-op [store op name & args]
-  (if (find bucket-ops op)
-    (let [{:keys [type]} (.context store)
-	  local ((op bucket-ops) store name)]
-      (if-not (= type :rest) local
-	((op rest-bucket-ops) store name)))
-    (let [read (read-ops op)
-	  spec (->> name (bucket-get (.bucket-map store)))
-	  b (if read (:read spec)
-		(:write spec))
-	  f (or read (write-ops op))]
-      (when-not b
-	(when-not spec
-	  (throw (Exception. (format "No bucket %s" name))))
-	(let [read-or-write (if read "read" "write")]
-	  (throw (Exception. (format "No %s operation for bucket %s" read-or-write name)))))
-      (apply f b args))))
+(defn store-op [store op & args]
+  (let [name (first args)
+	args (rest args)]
+    (if (find bucket-ops op)
+      (let [{:keys [type]} (.context store)
+	    local ((op bucket-ops) store name)]
+	(if-not (= type :rest) local
+		((op rest-bucket-ops) store name)))
+      (let [read (read-ops op)
+	    spec (->> name (bucket-get (.bucket-map store)))
+	    b (if read (:read spec)
+		  (:write spec))
+	    f (or read (write-ops op))]
+	(when-not b
+	  (when-not spec
+	    (throw (Exception. (format "No bucket %s" name))))
+	  (let [read-or-write (if read "read" "write")]
+	    (throw (Exception. (format "No %s operation for bucket %s" read-or-write name)))))
+	(apply f b args)))))
 
 (deftype Store [bucket-map context]
   clojure.lang.IFn
