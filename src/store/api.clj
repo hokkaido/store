@@ -117,6 +117,13 @@
   (applyTo [this args]
 	   (apply store-op this args)))
 
+(defn add-bucket [^Store s bucket-name bucket]
+  (bucket-put  (.bucket-map s)
+	       bucket-name
+	       {:read bucket
+		:write bucket})
+  s)
+
 (defn flush! [^Store store]
   (doseq [[_ spec] (bucket-seq (.bucket-map store))
 	  :when (-> spec :write-spec :flush)]
