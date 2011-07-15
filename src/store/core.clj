@@ -209,12 +209,18 @@
     (bucket-merge to k v))
   to)
 
+(defn bucket-flush-seq! [b]
+  (for [k (bucket-keys b)
+	:let [v (bucket-delete b k)]
+	:when v]
+    [k v]))
+
 (defn bucket-flush-to!
   "merge takes (k to-value from-value)"
   [from tos]
-  (doseq [k (bucket-keys from)]
-    (when-let [v (bucket-delete from k)]
-      (doseq [to tos] (bucket-merge to k v)))))
+  (doseq [[k v] (bucket-flush-seq! from)
+	  to tos]
+    (bucket-merge to k v)))
 
 (defn with-multicast
   [buckets]
