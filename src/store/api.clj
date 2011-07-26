@@ -9,14 +9,6 @@
   (:import [java.util.concurrent Executors TimeUnit
 	    ConcurrentHashMap]))
 
-(defn add-context [context spec]
-  (if-not context
-    spec
-    (merge
-     context
-     (context (:id spec))
-     spec)))
-
 (defn create-buckets [{:keys [read write] :as spec}]
   (let [r (if read
 	    (bucket (merge spec read))
@@ -28,16 +20,13 @@
       :read r :write w      
       :write-spec (or write spec))))
 
-(defn to-kv [f m]
-  [(f m) m])
-
 (defn buckets [specs & [context]]
   (->> specs
        (map #(->> %
 		  (?>> (string? %) hash-map :name)
-		  (add-context context)
+		  (merge context)
 		  create-buckets
-		  (to-kv :name)))
+		  ((fn [m] [(:name m) m]))))
        (into {})
        (ConcurrentHashMap.)
        hashmap-bucket))
