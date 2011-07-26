@@ -1,17 +1,16 @@
-(ns 
-#^{:doc "a lib for interacting with s3."}
-store.s3
-(:use store.core)
+(ns store.s3
+  (:use store.core
+	[plumbing.core :only [?>]])
   (:require [clojure.contrib.duck-streams :as ds])
   (:import
-       java.io.File
-       [java.io DataOutputStream ByteArrayOutputStream ObjectOutputStream
-	        DataInputStream ByteArrayInputStream ObjectInputStream]
-       org.jets3t.service.S3Service
-       org.jets3t.service.impl.rest.httpclient.RestS3Service
-       org.jets3t.service.model.S3Object
-       org.jets3t.service.security.AWSCredentials
-       org.jets3t.service.utils.ServiceUtils))
+   java.io.File
+   [java.io DataOutputStream ByteArrayOutputStream ObjectOutputStream
+    DataInputStream ByteArrayInputStream ObjectInputStream]
+   org.jets3t.service.S3Service
+   org.jets3t.service.impl.rest.httpclient.RestS3Service
+   org.jets3t.service.model.S3Object
+   org.jets3t.service.security.AWSCredentials
+   org.jets3t.service.utils.ServiceUtils))
 
 (defn s3-connection 
   ([{access-key :key secret-key :secretkey}] 
@@ -31,7 +30,7 @@ store.s3
        (seq (objects s b))))
 
 
-(defn create-bucket [^RestS3Service s3 ^String bucket-name]
+(defn create-bucket [^RestS3Service s3 ^String bucket-name] 
   (.createBucket s3 bucket-name))
 
 (defn delete-bucket [^RestS3Service s3 ^String bucket-name]
@@ -56,33 +55,34 @@ store.s3
         s   (.getDataInputStream obj)]
     (when s (read (java.io.PushbackReader. (java.io.InputStreamReader. s))))))
 
-
-
-
 (defn s3-bucket
   "Takes a S3 connection, a bucket name, and an optional map from logical
   bucket name to actual S3 bucket name."
-  [s3 bucket-name]
-  (create-bucket s3 bucket-name)
-  (reify store.core.IReadBucket
-    (bucket-keys [this]
-      (get-keys s3 bucket-name))
+  [{:keys [prefix merge name] :as opts}]
+  (let [s3 (s3-connection opts)
+	bucket-name (str prefix name)]
+    (create-bucket s3 bucket-name)
+    (->
+     (reify store.core.IReadBucket
+	    (bucket-keys [this]
+			 (get-keys s3 bucket-name))
 
-    (bucket-get [this k]
-      (get-clj s3 bucket-name (str k)))
+	    (bucket-get [this k]
+			(get-clj s3 bucket-name (str k)))
     
-    (bucket-exists? [this k]
-      (some #(= k (.getKey %))
-            (-> s3 (objects bucket-name (str k)) seq)))
+	    (bucket-exists? [this k]
+			    (some #(= k (.getKey %))
+				  (-> s3 (objects bucket-name (str k)) seq)))
 
-    (bucket-seq [this] (default-bucket-seq this))	 
+	    (bucket-seq [this] (default-bucket-seq this))	 
 	 
-    store.core.IWriteBucket
-    (bucket-put [this k v]
-      (put-clj s3 bucket-name (str k) v))
+	    store.core.IWriteBucket
+	    (bucket-put [this k v]
+			(put-clj s3 bucket-name (str k) v))
     
-    (bucket-delete [this k]
-      (delete-object s3 bucket-name (str k)))
+	    (bucket-delete [this k]
+			   (delete-object s3 bucket-name (str k)))
     
-    (bucket-update [this k f]
-      (default-bucket-update this k f))))
+	    (bucket-update [this k f]
+			   (default-bucket-update this k f)))
+     (?> merge with-merge-and-flush merge))))

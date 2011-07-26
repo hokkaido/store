@@ -1,7 +1,9 @@
 (ns store.bdb
   (:use store.core
         [clojure.java.io :only [file copy]]
-        [clojure.contrib.shell :only [sh]])
+        [clojure.contrib.shell :only [sh]]
+	[plumbing.core :only [?>]]
+	[plumbing.error :only [assert-keys]])
   (:import (com.sleepycat.je Database 
                              DatabaseEntry
                              LockMode
@@ -34,26 +36,6 @@
 (defn to-entry [clj]
   (DatabaseEntry. (.getBytes (pr-str clj) "UTF-8")))
 
-(defn bdb-put [^Database db k v]
-  (let [entry-key (to-entry k)
-        entry-val (to-entry v)]
-    (.put db nil entry-key entry-val)))
-
-(defn bdb-get [^Database db k]
-  (let [entry-key (to-entry k)
-        entry-val (DatabaseEntry.)]
-    (when (= (.get db nil entry-key entry-val LockMode/DEFAULT)
-	     OperationStatus/SUCCESS)
-      (from-entry entry-val))))
-
-(defn bdb-exists? [^Database db k]
-  (let [entry-key (to-entry k)
-        entry-val (DatabaseEntry.)]
-    (.setPartial entry-val (int 0) (int 0) true)
-    (= (.get db nil entry-key entry-val LockMode/DEFAULT)
-       OperationStatus/SUCCESS)))
-
-
 (defn cursor-next
   "returns a fn which acts as a cursor over db. each call
    returns a [key value] pair. closes cursor when all entries exhausted"
@@ -84,39 +66,14 @@
               (.set queued (get-next))
               res)))))
 
-(defn entries-seq
-  [^Database db]
-  (iterator-seq (cursor-iter db)))
-
-(defn keys-seq
-  [^Database db]
-  (map first
-       (iterator-seq (cursor-iter db :keys-only true))))
-
-(defn bdb-delete [^Database db k]
-  (let [entry-key (to-entry k)]
-    (.delete db nil entry-key)))
-
 (defn bdb-conf [read-only-db deferred-write cache-mode]
-  (let []
-    (doto (DatabaseConfig.)
-      (.setReadOnly read-only-db)
-      (.setAllowCreate (not read-only-db))
-      (.setDeferredWrite deferred-write)
-      (.setCacheMode (cache-modes cache-mode)))))
+  (doto (DatabaseConfig.)
+    (.setReadOnly read-only-db)
+    (.setAllowCreate (not read-only-db))
+    (.setDeferredWrite deferred-write)
+    (.setCacheMode (cache-modes cache-mode))))
 
-;;http://download.oracle.com/docs/cd/E17277_02/html/java/com/sleepycat/je/EnvironmentConfig.html
-;;https://github.com/voldemort/voldemort/blob/master/src/java/voldemort/store/bdb/BdbStorageConfiguration.java
-
-;;JVM m2.xlarge for dbdb instances
-;;https://gist.github.com/582a034e2e67563742da
-
-;;for crawl.
-;;java: when opening socket:  socket buffer size
-;;linux: tcp window scaling
-;;should be running on m2.large
-
-(defn bdb-env
+(defn- bdb-env
   "Parameters:
    :path - bdb environment path
    :read-only - set bdb environment to be read-only
@@ -125,7 +82,7 @@
    :clean-util-thresh - % to trigger log file cleaning (higher means cleaner)
    :locking - toggle locking, if turned off then the cleaner is also
    :cache-percent - percent of heap to use for BDB cache"
-  [& {:keys [path
+  [{:keys [path
              read-only
              checkpoint-kb  ;;corresponds to new
              checkpoint-mins ;;corresponda to new
@@ -145,10 +102,10 @@
            checkpoint-kb 0
            num-cleaner-threads 3
            checkpoint-mins 0
-           clean-util-thresh 50
+           clean-util-thresh 75
            min-file-utilization 5
-           checkpoint-high-priority? false
-           checkpoint-bytes-interval (megs 5) ;;new
+           checkpoint-high-priority? true
+           checkpoint-bytes-interval (megs 5)
            checkpoint-wakeup-interval (seconds 30000) ;;in microseconds
            locking true
            lock-timeout 500 ;;new
@@ -203,49 +160,57 @@
       (.endBackup backup)
       ret)))
 
-(defn bdb-env-close [^Environment env]
-  (.close env))  
+(defmethod bucket :bdb
+  [{:keys [name path cache cache-mode read-only deferred-write merge]
+    :or {cache-mode :evict-ln
+	 read-only false
+	 deferred-write false}
+    :as args}]
+  (assert (not (contains? args :cache)))  ;;TOOD: remove later.  notifying clients of their broken api call.
+  (assert-keys [:name :path] args)
+  (let [db-conf (bdb-conf read-only deferred-write cache-mode)
+	;;never open environemtns readonly, see: http://forums.oracle.com/forums/thread.jspa?threadID=2239407&tstart=0
+	env (bdb-env (dissoc args :read-only))
+	db (.openDatabase env nil name db-conf)]
+    (->
+     (reify IReadBucket
+	    (bucket-get [this k]
+			(let [entry-key (to-entry k)
+			      entry-val (DatabaseEntry.)]
+			  (when (= (.get db nil entry-key entry-val LockMode/DEFAULT)
+				   OperationStatus/SUCCESS)
+			    (from-entry entry-val))))
+	    (bucket-batch-get [this ks]
+			      (default-bucket-batch-get this ks))
+	    
+	    (bucket-keys [this]
+			 (map first
+			      (iterator-seq (cursor-iter db :keys-only true))))
+	    (bucket-seq [this]
+			(iterator-seq (cursor-iter db)))
 
-(defn bdb-db
-  "Parameters:
-   name - database name
-   :env - the database environment
-   :read-only - set db to read-only, overrides environment config
-   :deferred-write - toggle deferred writing to filesystem
-   :cache-mode - eviction policy for cache"
-  [name env & {:keys [read-only deferred-write cache-mode]
-               :or {read-only false
-                    deferred-write false
-                    cache-mode :default}}]
-  (let [db-conf (bdb-conf read-only deferred-write cache-mode)]
-    (.openDatabase env nil name db-conf)))
+	    (bucket-exists? [this k]
+			    (let [entry-key (to-entry k)
+				  entry-val (DatabaseEntry.)]
+			      (.setPartial entry-val (int 0) (int 0) true)
+			      (= (.get db nil entry-key entry-val LockMode/DEFAULT)
+				 OperationStatus/SUCCESS)))
 
-(defn bdb-bucket
-  "returns callback fn for a Berkeley DB backed bucket."
-  [^Database db]
-  (reify IReadBucket
-    (bucket-get [this k]
-                (bdb-get db k))
-    (bucket-batch-get [this ks]
-                      (default-bucket-batch-get this ks))
-    
-    (bucket-keys [this]
-                 (keys-seq db))
-    (bucket-seq [this]
-                (entries-seq db))
+	    IWriteBucket
 
-    (bucket-exists? [this k] (bdb-exists? db k))
-
-    IWriteBucket
-
-    (bucket-put [this k v]
-                (str (bdb-put db k v)))
-    (bucket-delete [this k]
-                (str (bdb-delete db k)))
-    (bucket-update [this k f]
-                   (default-bucket-update this k f))
-    (bucket-sync [this]
-                 (when (-> db .getConfig .getDeferredWrite)
-                   (str (.sync db))))
-    (bucket-close [this]
-		  (str (.close db)))))
+	    (bucket-put [this k v]
+			(let [entry-key (to-entry k)
+			      entry-val (to-entry v)]
+			  (.put db nil entry-key entry-val)))
+	    (bucket-delete [this k]
+			   (.delete db nil (to-entry k)))
+	    (bucket-update [this k f]
+			   (default-bucket-update this k f))
+	    (bucket-sync [this]
+			 (when (-> db .getConfig .getDeferredWrite)
+			   (.sync db)))
+	    (bucket-close [this]
+			  (do 
+			    (.close db)
+			    (.close env))))
+     (?> merge with-merge-and-flush merge))))

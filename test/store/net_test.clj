@@ -77,10 +77,11 @@
 	   (:body (exec-request s {:name "hm" :op "get"}  "k1"))))))
 
 (deftest rest-bucket-test
-  (let [b (rest-bucket :name "b1"
-                       :host "localhost"
-		       :batch-size 2
-                       :port 4445)]
+  (let [b (bucket {:type :rest
+		   :name "b1"
+		   :host "localhost"
+		   :batch-size 2
+		   :port 4445})]
     (bucket-put b "k1" "v1")
     (is (= (bucket-get b "k1") "v1"))
     (is (find-first (partial = "k1") (bucket-keys b)))
@@ -144,10 +145,11 @@
       (is (= ["b1"] (s1 :buckets)))))
 
 (deftest rest-client-keywords-test
-  (let [b (rest-bucket :name "b1"
-                       :host "localhost"
-		       :batch-size 2
-                       :port 4445)
+  (let [b (bucket {:type :rest
+		   :name "b1"
+		   :host "localhost"
+		   :batch-size 2
+		   :port 4445})
 	body (fetcher.core/fetch :get "http://www.google.com")
 	pool (java.util.concurrent.Executors/newFixedThreadPool 100)
 	tasks (range 10)
@@ -166,11 +168,12 @@
     (is (= 10 (count (bucket-keys b))))))
 
 (deftest rest-client-strings-test
-  (let [b (rest-bucket :name "b1"
-                       :host "localhost"
-		       :batch-size 2
-                       :port 4445
-		       :keywordize? false)
+  (let [b (bucket {:type :rest
+		   :name "b1"
+		   :host "localhost"
+		   :batch-size 2
+		   :port 4445
+		   :keywordize? false})
 	body (fetcher.core/fetch :get "http://www.google.com")
 	pool (java.util.concurrent.Executors/newFixedThreadPool 100)
 	tasks (range 10)

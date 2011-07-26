@@ -37,8 +37,8 @@
     (s :update "b1" "k-count" (fnil inc 0))
     (is (= (s :get "b1" "k-count") 1))))
 
-(deftest hashmap-bucket-test
-  (generic-bucket-test (hashmap-bucket)))
+(deftest mem-bucket-test
+  (generic-bucket-test (bucket {:type :mem})))
 
 (deftest hashmap-store-test
   (generic-store-test (fn [names]
@@ -50,13 +50,16 @@
 
 (deftest fs-bucket-test
   (generic-bucket-test
-   (fs-bucket
-    (.getAbsolutePath (java.io.File. "store-core-test-dir"))))
+   (bucket {:type :fs
+	    :name "foo"
+	    :path (.getAbsolutePath (java.io.File. "store-core-test-dir"))}))
   (.deleteOnExit (java.io.File. "store-core-test-dir")))
 
 (deftest fs-bucket-modified-test
-  (let [b (fs-bucket (.getAbsolutePath
-                      (java.io.File. "store-core-test-dir")))]
+  (let [b (bucket {:type :fs
+		   :name "foo"
+		   :path (.getAbsolutePath
+		     (java.io.File. "store-core-test-dir"))})]
     (bucket-put b "k1" "v1")
     (Thread/sleep 1000)
     (bucket-put b "k2" "v2")
@@ -83,8 +86,8 @@
     (is (not (.exists (java.io.File. root "my-key"))))))
 
 (deftest flush-test
-  (let [b1 (hashmap-bucket)
-        b2 (hashmap-bucket)]
+  (let [b1 (bucket {:type :mem})
+        b2 (bucket {:type :mem})]
     (bucket-put b1 :foo {:bar "bar"})
     (bucket-put b1 :nutty {:mcsackhang "mcsackhang"})
     (bucket-merge-to! b1 (with-merge b2 (fn [_ v1 v2] (merge v1 v2))))
@@ -100,7 +103,7 @@
 
 (deftest with-flush-test
   (let [merge (fnil (fn [_ v1 v2] (merge v1 v2)) {})
-	b1 (with-merge (hashmap-bucket) merge)
+	b1 (with-merge (bucket {:type :mem}) merge)
 	b2 (with-flush b1 merge)]
     (bucket-merge b2 "k" {"v1" "v"})
     (is (nil? (bucket-get b1 "k")))
@@ -109,7 +112,7 @@
 
 (deftest with-flush-multicast-test
   (let [shitty-bucket #(with-merge
-                         (hashmap-bucket)
+                         (bucket {:type :mem})
                          (fnil (fn [_ v1 v2] (merge v1 v2)) {}))
         remote-buckets
         [(shitty-bucket)
@@ -124,8 +127,8 @@
       (is (= (bucket-get x "k")  {"v1" "v"})))))
 
 (deftest with-multicast-test
-  (let [b1 (hashmap-bucket)
-        b2 (hashmap-bucket)
+  (let [b1 (bucket {:type :mem})
+        b2 (bucket {:type :mem})
         mb (with-multicast [b1 b2])]
     (bucket-put mb "k1" "v1")
     (bucket-put mb "k2" "v2")
@@ -147,9 +150,9 @@
     (is (= 10 (bucket-get caching :a)))))
 
 (deftest add-listeners-test
-  (let [b  (hashmap-bucket)
-	b1 (hashmap-bucket)
-        b2 (hashmap-bucket)
+  (let [b  (bucket {:type :mem})
+	b1 (bucket {:type :mem})
+        b2 (bucket {:type :mem})
         mb (add-write-listeners b [b1 b2])]
     (bucket-put mb "k1" "v1")
     (is (= (bucket-seq mb)  [["k1" "v1"]]))
@@ -157,22 +160,10 @@
     (is (= (bucket-get b1 "k1") "v1"))
     (is (= (bucket-get b2 "k1") "v1"))))
 
-(deftest store-flush-test
-  (let [s (store [{:name "b"
-		   :flush true
-		   :merge (fn [_ old new] (+ (or old 0) new))}
-		  "b1"]
-		 {:type :mem})]
-    (s :merge "b" "k" 1)
-    (is (nil? (s :get "b" "k")))
-    (s :sync "b")
-    (s :put "b1" "k" 42)
-    (is (= 1 (s :get "b" "k")))))
-
 (deftest bucket-counting-merge-test
   (let [n 1000
 	b (with-merge
-	      (hashmap-bucket)
+	      (bucket {:type :mem})
 	      (fn [_ sum x] (+ (or sum 0) x)))
 	latch (java.util.concurrent.CountDownLatch. n)
 	pool (java.util.concurrent.Executors/newFixedThreadPool 10)]

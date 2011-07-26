@@ -8,71 +8,52 @@
 	[plumbing.core :only [find-first]])
   (:import (com.sleepycat.je PreloadConfig)))
 
-(defn ensure-test-directory []
+(defn test-bdb [& [args]]
+  (bucket (merge args {:type :bdb
+		       :name "bdb_test"
+		       :path "/tmp/bdbtest/"})))
+
+(defn new-test-bdb [& [args]]
   (delete-file-recursively (java.io.File. "/tmp/bdbtest") true)
   (make-parents (java.io.File. "/tmp/bdbtest/ping"))
-  (delete-file (java.io.File.  "/tmp/bdbtest/ping") true))
+  (delete-file (java.io.File.  "/tmp/bdbtest/ping") true)
+  (test-bdb args))
 
 (deftest bdb-basics
-  (ensure-test-directory)
-  (let [db (bdb-db "bdb_test" (bdb-env :path "/tmp/bdbtest/"))
-	_ (bdb-put db :foo [1 2 3])]
-    (is (= [1 2 3] (bdb-get db :foo)))
-    (is (= [:foo [1 2 3]] (first (entries-seq db))))
-    (do (bdb-delete db :foo))
-    (is (empty? (entries-seq db)))))
+  (let [db (new-test-bdb)
+	_ (bucket-put db :foo [1 2 3])]
+    (is (= [1 2 3] (bucket-get db :foo)))
+    (is (= [:foo [1 2 3]] (first (bucket-seq db))))
+    (do (bucket-delete db :foo))
+    (is (empty? (bucket-seq db)))
+    (bucket-close db)))
 
 (deftest bdb-read-only-test
-  (ensure-test-directory)
-  (let [db (bdb-db "bdb_test" (bdb-env :path "/tmp/bdbtest/"))]
-    (bdb-put db "k" "v"))
-  (let [db-read (bdb-db "bdb_test" (bdb-env :path "/tmp/bdbtest/")
-                        :read-only true)]
-    (is (= "v" (bdb-get db-read "k")))))
+  (let [db (new-test-bdb)]
+    (bucket-put db "k" "v")
+    (bucket-close db))
+  (let [db-read (test-bdb {:read-only true})]
+    (is (= "v" (bucket-get db-read "k")))
+    (bucket-close db-read)))
 
 (deftest bdb-deferred-write-test
-  (ensure-test-directory)
-  (let [db (bdb-db "bdb_test_deferred" (bdb-env :path "/tmp/bdbtest/")
-                   :deferred-write true)]
-    (bdb-put db "k" "v")
-    (.close db))
-  (let [db-read (bdb-db "bdb_test_deferred" (bdb-env :path "/tmp/bdbtest/")
-                   :deferred-write false)]
-    (is (= "v" (bdb-get db-read "k")))))
+  (let [db (new-test-bdb {:deferred-write true})]
+    (bucket-put db "k" "v")
+    (bucket-close db))
+  (let [db-read (test-bdb {:deferred-write false})]
+    (is (= "v" (bucket-get db-read "k")))
+    (bucket-close db-read)))
 
 (deftest bdb-bucket-test
-  (ensure-test-directory)
-  (let [b (bdb-bucket (bdb-db "bdb_test" (bdb-env :path "/tmp/bdbtest")))]
-    (generic-bucket-test b)))
+  (let [db (new-test-bdb)]
+    (generic-bucket-test db)
+    (bucket-close db)))
 
 (deftest bucket-keys-test
-  (ensure-test-directory)
-  (let [b (bdb-bucket
-           (bdb-db "keys_test"
-                   (bdb-env :path "/tmp/bdbtest")))]
+  (let [b (new-test-bdb)]
     (bucket-put b "k1" "v1")
     (bucket-put b "k2" "v2")
-    (bucket-put b "k3" "v3")
-    (is (= '("k1" "k2" "k3")
-           (sort (bucket-keys b))))))
-
-(defn mk-data [n m]
-  (reduce
-   (fn [res i]
-     (assoc res (str "key" i) (pr-str (range m))))
-   {}
-   (range n)))
-
-;; (defn load-bucket [b kvs threads]
-;;   (work/do-work
-;;    #(apply store/bucket-put b  %)
-;;    threads
-;;    kvs))
-
-;; (deftest ^{:performance true} bdb-cursor-test
-;;   (ensure-test-directory)
-;;   (let [b (bdb-bucket (bdb-db "bdb_test"
-;;                                (bdb-env :path
-;;                                         "/tmp/bdbtest")))]
-;;     (load-bucket b (mk-data 10000 10000) 10)
-;;     (time (count (bucket-seq b)))))
+    (bucket-put b "k4" "v4")
+    (is (= '("k1" "k2" "k4")
+           (sort (bucket-keys b))))
+    (bucket-close b)))

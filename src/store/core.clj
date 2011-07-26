@@ -1,5 +1,6 @@
 (ns store.core
   (:use plumbing.core
+	[plumbing.error :only [assert-keys]]
         [clojure.java.io :only [file]])
   (:require 
    [ring.util.codec :as ring]
@@ -28,6 +29,7 @@
   (bucket-merge [this k v] "merge v into current value")
   (bucket-merger [this] "return the fn used to merge. should be 3 args of [k cur-val new-val]"))
 
+
 ;;; Default Bucket Operations
 
 (defn default-bucket-exists? [b k]
@@ -53,112 +55,6 @@
 
 (defn default-bucket-merge [b merge-fn k v]
   (bucket-update b k (fn [v-to] (merge-fn v-to v))))
-
-;;; Simple Buckets
-
-(defn fs-bucket
-  ([path name] (fs-bucket (str (file path name))))
-  ([dir-path]
-  ;; ensure directory exists
-      (let [f (if (string? dir-path)
-		(file dir-path)
-		dir-path)]
-	(.mkdirs f)
-	(reify
-	 IReadBucket
-	 (bucket-get [this k]
-		     (let [f (File. f ^String (ring/url-encode k))]
-		       (when (.exists f) (-> f slurp read-string))))
-	 (bucket-batch-get [this ks] (default-bucket-batch-get this ks))
-	 (bucket-seq [this] (default-bucket-seq this))     
-	 (bucket-exists? [this k]		
-			 (let [f (File. f ^String (ring/url-encode k))]
-			   (.exists f)))
-	 (bucket-keys [this]
-		      (for [^File c (.listFiles f)
-			    :when (and (.isFile c) (not (.isHidden c)))]
-			(ring/url-decode (.getName c))))
-	 (bucket-modified [this k]
-			  (time.coerce/from-long
-			   (.lastModified (File. dir-path 
-						 ^String (ring/url-encode k)))))
-      
-	 IWriteBucket
-	 (bucket-put [this k v]
-		     (let [f (File. f ^String(ring/url-encode k))]
-		       (spit f (pr-str v))))
-	 (bucket-delete [this k]
-			(let [f (File. f ^String (ring/url-encode  k))]
-			  (.delete f)))
-	 (bucket-update [this k f]
-			(default-bucket-update this k f))
-	 (bucket-sync [this] nil)
-	 (bucket-close [this] nil)))))
-
-(defn hashmap-bucket
-  ([]
-     (let [h (ConcurrentHashMap.)]
-       (hashmap-bucket h)))
-  ([^java.util.concurrent.ConcurrentHashMap h]
-     (reify IReadBucket
-
-       (bucket-keys [this]
-                    (enumeration-seq (.keys h)))
-       (bucket-get [this k]
-                   (.get h k))
-       (bucket-batch-get [this ks] (default-bucket-batch-get this ks))
-       
-       (bucket-seq [this]
-                   (for [^java.util.Map$Entry e
-                         (.entrySet h)]
-                     [(.getKey e) (.getValue e)]))
-
-       (bucket-exists? [this k]
-                       (.containsKey h k))
-
-       IWriteBucket
-       (bucket-put [this k v]
-                   (.put h k v))
-       (bucket-delete [this k]
-                      (.remove h k))
-       (bucket-update [this k f]
-                      (loop []
-                        (let [v (.get h k) new-v (f v)			
-                              replaced? (cond
-                                         (nil? v) (nil? (.putIfAbsent h k new-v))
-                                         (nil? new-v) (or (nil? v) (.remove h k v))
-                                         :else (.replace h k v new-v))]
-                          (when (not replaced?)
-                            (recur)))))
-       (bucket-sync [this] nil)
-       (bucket-close [this] nil))))
-
-;;; Extend Read buckets to clojure maps
-
-(def ^:private read-bucket-map-impls
-     {:bucket-get (fn [this k] (this k))
-      :bucket-seq (fn [this] (seq this))
-      :bucket-batch-get (fn [this ks] (default-bucket-batch-get this ks))
-      :bucket-keys (fn [this] (keys this))
-      :bucket-exists? (fn [this k] (find this k))
-      })
-
-(doseq [c [clojure.lang.PersistentHashMap
-	   clojure.lang.PersistentArrayMap
-	   clojure.lang.PersistentStructMap]]
-  (extend c IReadBucket read-bucket-map-impls))
-
-
-;;; Generic Buckets
-
-(defn copy-bucket [src dst]
-  (doseq [k (bucket-keys src)]
-    (bucket-put dst k (bucket-get src k))))
-
-(defn bucket-inc [b k]
-  (bucket-update
-   b k
-   (fnil inc 0)))
 
 (defn with-merge [b merge-fn]
   (reify           
@@ -199,6 +95,49 @@
     (bucket-seq [this] (bucket-seq read-b))
     (bucket-modified [this k] (bucket-modified read-b k))))
 
+(defn hashmap-bucket [h]
+  (reify IReadBucket
+
+	   (bucket-keys [this]
+			(enumeration-seq (.keys h)))
+	   (bucket-get [this k]
+		       (.get h k))
+	   (bucket-batch-get [this ks] (default-bucket-batch-get this ks))
+       
+	   (bucket-seq [this]
+		       (for [^java.util.Map$Entry e
+			     (.entrySet h)]
+			 [(.getKey e) (.getValue e)]))
+
+	   (bucket-exists? [this k]
+			   (.containsKey h k))
+
+	   IWriteBucket
+	   (bucket-put [this k v]
+		       (.put h k v))
+	   (bucket-delete [this k]
+			  (.remove h k))
+	   (bucket-update [this k f]
+			  (loop []
+			    (let [v (.get h k) new-v (f v)			
+				  replaced? (cond
+					     (nil? v) (nil? (.putIfAbsent h k new-v))
+					     (nil? new-v) (or (nil? v) (.remove h k v))
+					     :else (.replace h k v new-v))]
+			      (when (not replaced?)
+				(recur)))))
+	   (bucket-sync [this] nil)
+	   (bucket-close [this] nil)))
+
+(defn copy-bucket [src dst]
+  (doseq [k (bucket-keys src)]
+    (bucket-put dst k (bucket-get src k))))
+
+(defn bucket-inc [b k]
+  (bucket-update
+   b k
+   (fnil inc 0)))
+
 (defn bucket-merge-to!
   "merge takes (k to-value from-value)"
   [from to]
@@ -215,7 +154,7 @@
 	:when v]
     [k v]))
 
-(defn bucket-flush-to!
+ (defn bucket-flush-to!
   "merge takes (k to-value from-value)"
   [from tos]
   (doseq [[k v] (bucket-flush-seq! from)
@@ -234,31 +173,107 @@
   (compose-buckets b     
      (with-multicast (cons b listener-buckets))))
 
+
+;;TODO: remove flush check, moving away from legacy api.
+(defmulti bucket #(do (assert (not (contains? % :flush)))
+		   (or (:type %) :mem)))
+
 (defn with-flush
   "takes a bucket that has with-merge and returns an in-memory bucket which will use bucket-merge to merge values using the flush-merge-fn and when bucket-sync is called on return bucket
   will flush memory bucket into underlying bucket using underyling bucket merge fn"
   ([b]
      (with-flush b (bucket-merger
                     (if (coll? b) (first b) b))))
-  ([bucket merge-fn]
-     (let [buckets (if (coll? bucket) bucket [bucket])
-           mem-bucket (with-merge (hashmap-bucket) merge-fn)
+  ([b merge-fn]
+     (let [buckets (if (coll? b) b [b])
+           mem-bucket (with-merge (bucket {:type :mem}) merge-fn)
            do-flush! #(bucket-flush-to! mem-bucket buckets)]
-       (reify
-	store.core.IWriteBucket
-	(bucket-merge [this k v]
-		      (bucket-merge mem-bucket k v))
-	(bucket-update [this k f]
-		       (bucket-update mem-bucket k f))
-	(bucket-sync [this]
-		     (do-flush!)
-		     (map bucket-sync buckets))
-	(bucket-close [this]
-		      (do-flush!)
-		      (map bucket-close buckets))))))
+       (->> (reify
+	    store.core.IWriteBucket
+	    (bucket-merge [this k v]
+			  (bucket-merge mem-bucket k v))
+	    (bucket-update [this k f]
+			   (bucket-update mem-bucket k f))
+	    (bucket-sync [this]
+			 (do-flush!)
+			 (map bucket-sync buckets))
+	    (bucket-close [this]
+			  (do-flush!)
+			  (map bucket-close buckets)))
+	   (compose-buckets b)))))
+
+(defn with-merge-and-flush [bucket flush]
+  (-> bucket
+      (with-merge flush)
+      (with-flush flush)))
+
+(defmethod bucket :fs [{:keys [name path merge] :as args}]
+	   (assert-keys [:name :path] args)
+	   (let [dir-path (str (file path name))
+		 f (if (string? dir-path)
+		     (file dir-path)
+		     dir-path)]
+	     (.mkdirs f)
+	     (->
+	      (reify
+	       IReadBucket
+	       (bucket-get [this k]
+			   (let [f (File. f ^String (ring/url-encode k))]
+			     (when (.exists f) (-> f slurp read-string))))
+	       (bucket-batch-get [this ks] (default-bucket-batch-get this ks))
+	       (bucket-seq [this] (default-bucket-seq this))     
+	       (bucket-exists? [this k]		
+			       (let [f (File. f ^String (ring/url-encode k))]
+				 (.exists f)))
+	       (bucket-keys [this]
+			    (for [^File c (.listFiles f)
+				  :when (and (.isFile c) (not (.isHidden c)))]
+			      (ring/url-decode (.getName c))))
+	       (bucket-modified [this k]
+				(time.coerce/from-long
+				 (.lastModified (File. dir-path 
+						       ^String (ring/url-encode k)))))
+	       
+	       IWriteBucket
+	       (bucket-put [this k v]
+			   (let [f (File. f ^String(ring/url-encode k))]
+			     (spit f (pr-str v))))
+	       (bucket-delete [this k]
+			      (let [f (File. f ^String (ring/url-encode  k))]
+				(.delete f)))
+	       (bucket-update [this k f]
+			      (default-bucket-update this k f))
+	       (bucket-sync [this] nil)
+	       (bucket-close [this] nil))
+	      (?> merge with-merge-and-flush merge))))
+
+
+
+(defmethod bucket :mem [{:keys [merge]}]
+  (-> (ConcurrentHashMap.)
+      hashmap-bucket 	     
+      (?> merge with-merge merge)))
+
+;;; Extend Read buckets to clojure maps
+
+(def ^:private read-bucket-map-impls
+     {:bucket-get (fn [this k] (this k))
+      :bucket-seq (fn [this] (seq this))
+      :bucket-batch-get (fn [this ks] (default-bucket-batch-get this ks))
+      :bucket-keys (fn [this] (keys this))
+      :bucket-exists? (fn [this k] (find this k))
+      })
+
+(doseq [c [clojure.lang.PersistentHashMap
+	   clojure.lang.PersistentArrayMap
+	   clojure.lang.PersistentStructMap]]
+  (extend c IReadBucket read-bucket-map-impls))
+
+
+;;; Generic Buckets
 
 (defn caching-bucket [f merge-fn]
-  (let [b (with-merge (hashmap-bucket) merge-fn)]
+  (let [b (with-merge (bucket {:type :mem}) merge-fn)]
     (compose-buckets
      (reify
       store.core.IReadBucket

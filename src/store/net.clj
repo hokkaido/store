@@ -2,7 +2,7 @@
   (:use store.core
         [clojure.java.io :only [file copy]]
         [clojure.contrib.shell :only [sh]]
-        [plumbing.core :only [keywordize-map]]
+        [plumbing.core :only [keywordize-map ?>]]
 	[plumbing.error :only [with-ex logger]]
         [clojure.string :only [lower-case]]
 	[clojure.java.io :only [reader]]
@@ -165,29 +165,28 @@
       rest-store-handler
       (start-web {:port port :join? false})))
 		  
-(defn rest-bucket
-  [& {:keys [batch-size]
-      :or {batch-size 10000}
-      :as conf}]
+(defmethod bucket :rest [{:keys [batch-size merge] :or {batch-size 10000} :as conf}]
   (let [exec (mpartial rest-call conf)]
-    (reify
-     store.core.IReadBucket
-     (bucket-get [this k] (exec {:op "get" :as k}))
-     (bucket-seq [this] (exec {:op "seq"}))
-     (bucket-exists? [this k] (exec {:op "exists?" :as k}))
-     (bucket-keys [this] (exec {:op "keys"}))
-     (bucket-batch-get [this ks]
-       (->> ks
-	    (partition-all batch-size)
-	    (mapcat (fn [p] (exec {:op "batch-get" :body p})))))
-     (bucket-modified [this k] (exec {:op "modified" :as k}))
+    (->
+     (reify
+      store.core.IReadBucket
+      (bucket-get [this k] (exec {:op "get" :as k}))
+      (bucket-seq [this] (exec {:op "seq"}))
+      (bucket-exists? [this k] (exec {:op "exists?" :as k}))
+      (bucket-keys [this] (exec {:op "keys"}))
+      (bucket-batch-get [this ks]
+			(->> ks
+			     (partition-all batch-size)
+			     (mapcat (fn [p] (exec {:op "batch-get" :body p})))))
+      (bucket-modified [this k] (exec {:op "modified" :as k}))
 
-     store.core.IWriteBucket
-     (bucket-put [this k v] (exec {:op "put" :as k :body v}))
-     (bucket-delete [this k] (exec {:op "delete" :as k}))
-     (bucket-update [this k f]
-		    (throw (Exception. (format "can not call update on rest bucket %s with key: %s and update fn: %s" this k f))))
-     (bucket-merge [this k v]
-		   (exec {:op "merge" :as k :body v}))
-     (bucket-close [this])
-     (bucket-sync [this] (exec {:op "sync"})))))
+      store.core.IWriteBucket
+      (bucket-put [this k v] (exec {:op "put" :as k :body v}))
+      (bucket-delete [this k] (exec {:op "delete" :as k}))
+      (bucket-update [this k f]
+		     (throw (Exception. (format "can not call update on rest bucket %s with key: %s and update fn: %s" this k f))))
+      (bucket-merge [this k v]
+		    (exec {:op "merge" :as k :body v}))
+      (bucket-close [this])
+      (bucket-sync [this] (exec {:op "sync"})))
+     (?> merge with-flush merge))))

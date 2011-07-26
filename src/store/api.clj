@@ -9,32 +9,6 @@
   (:import [java.util.concurrent Executors TimeUnit
 	    ConcurrentHashMap]))
 
-(defn raw-bucket [{:keys [name type db-env host port path prefix]
-		   :or {type :mem}
-		   :as opts}]
-  (case type
-	:bdb  (bdb-bucket
-	       (apply bdb-db name db-env
-		      (apply concat (merge {:cache-mode :evict-ln}
-					   opts))))
-	:fs (fs-bucket path name)
-	:mem (hashmap-bucket)
-	:rest (apply rest-bucket (apply concat opts))
-        :s3   (s3-bucket (s3-connection opts) (str prefix name))
-	(throw (java.lang.Exception.
-		(format "bucket type %s does not exist." type)))))
-
-(defn add-flush [bucket flush]
-  (compose-buckets
-   bucket
-   (with-flush bucket flush)))
-
-(defn bucket
-  [{:keys [merge,flush,type] :as spec}]
-  (-> (raw-bucket spec)
-      (?> (and merge (not= :rest type)) with-merge merge)
-      (?> flush add-flush merge)))
-
 (defn add-context [context spec]
   (if-not context
     spec
