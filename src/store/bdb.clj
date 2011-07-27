@@ -1,6 +1,6 @@
 (ns store.bdb
   (:use store.core
-        [clojure.java.io :only [file copy]]
+        [clojure.java.io :only [file copy make-parents]]
         [clojure.contrib.shell :only [sh]]
 	[plumbing.core :only [?>]]
 	[plumbing.error :only [assert-keys]])
@@ -134,6 +134,7 @@
                                       (str log-file-max))
                      (.setLocking locking)
                      (.setCacheSize (megs cache-size)))]
+    (make-parents (file path "touch"))
     (Environment. (file path) env-config)))
 
 (defn ^long bdb-env-backup
