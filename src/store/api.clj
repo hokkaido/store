@@ -33,7 +33,7 @@
 
 (def bucket-ops
      {:buckets (fn [store name]  ;;HACK, don't need name.  just puinting until we do api overahul.
-		(bucket-keys (.bucket-map store)))
+		 (bucket-keys (.bucket-map store)))
       :bucket (fn [store bucket-name]
 		(bucket-get (.bucket-map store) bucket-name))
       :add (fn [store bucket-name]

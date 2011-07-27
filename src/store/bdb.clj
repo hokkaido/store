@@ -18,8 +18,8 @@
 
 ;;http://download.oracle.com/docs/cd/E17277_02/html/GettingStartedGuide
 
-(defn megs [x] (* x 1000000))
-(defn seconds [x] (* x 1000))
+(defn- megs [x] (* x 1000000))
+(defn- seconds [x] (* x 1000))
 
 (def cache-modes {:default CacheMode/DEFAULT
                   :evict-bin CacheMode/EVICT_BIN
@@ -109,9 +109,10 @@
            checkpoint-wakeup-interval (seconds 30000) ;;in microseconds
            locking true
            lock-timeout 500 ;;new
-           cache-size (megs 512) ;;new -- based on % of heap give it about 2/3 of heap up to like 10 ... cap at 10 GB above
+           cache-size 512 ;;new -- based on % of heap give it about 2/3 of heap up to like 10 ... cap at 10 GB above
            max-open-files 512
            log-file-max (megs 64)}}]
+  (sh "mkdir" "-p" path)
   (let [env-config (doto (EnvironmentConfig.)
                      (.setReadOnly read-only)
                      (.setAllowCreate (not read-only))
@@ -132,7 +133,7 @@
                      (.setConfigParam (EnvironmentConfig/LOG_FILE_MAX)  ;;new
                                       (str log-file-max))
                      (.setLocking locking)
-                     (.setCacheSize cache-size))]
+                     (.setCacheSize (megs cache-size)))]
     (Environment. (file path) env-config)))
 
 (defn ^long bdb-env-backup
@@ -161,7 +162,7 @@
       ret)))
 
 (defmethod bucket :bdb
-  [{:keys [name path cache cache-mode read-only deferred-write merge]
+  [{:keys [name path cache-mode read-only deferred-write merge]
     :or {cache-mode :evict-ln
 	 read-only false
 	 deferred-write false}
