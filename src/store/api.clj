@@ -90,9 +90,10 @@
 		:write bucket})
   s)
 
+;;TODO: fucked, create a coherent model for store flush and shutdown
 (defn flush! [^Store store]
   (doseq [[_ spec] (bucket-seq (.bucket-map store))
-	  :when (-> spec :write-spec :flush)]
+	  :when (-> spec :write-spec)]
     (bucket-sync (:write spec))))
 
 (defn shutdown [^Store store]

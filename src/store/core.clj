@@ -196,10 +196,17 @@
 			   (bucket-update mem-bucket k f))
 	    (bucket-sync [this]
 			 (do-flush!)
-			 (map bucket-sync buckets))
+			 (doseq [b buckets]
+			    (bucket-sync b)))
 	    (bucket-close [this]
 			  (do-flush!)
-			  (map bucket-close buckets)))
+			  (doseq [b buckets]
+			    (bucket-close b)))
+	    ;;WARNING: This is not a precise delete, it can fail to delete elements from the underlying bucket because we do not hold a lock around the compound operation of deleting from the memory merge bucket and the on disk target buckets.
+	    (bucket-delete [this k]
+			   (doseq [b (cons mem-bucket
+					   buckets)]
+			     (bucket-delete b k))))
 	   (compose-buckets b)))))
 
 (defn with-merge-and-flush [bucket flush]
