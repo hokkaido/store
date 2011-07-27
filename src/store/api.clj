@@ -31,8 +31,6 @@
        (ConcurrentHashMap.)
        hashmap-bucket))
 
-(set! *warn-on-reflection* 1)
-
 (declare bucket-ops store-op)
 
 (deftype Store [bucket-map context]
@@ -50,7 +48,7 @@
 
 (def bucket-ops
      {:buckets (fn [^store.api.Store store name]  ;;HACK, don't need name.  just puinting until we do api overahul.
-		(bucket-keys (.bucket-map store)))
+		 (bucket-keys (.bucket-map store)))
       :bucket (fn [^store.api.Store store bucket-name]
 		(bucket-get (.bucket-map store) bucket-name))
       :add (fn [^store.api.Store store bucket-name]
