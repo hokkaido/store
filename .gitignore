@@ -24,3 +24,5 @@ aws.clj
 *.settings
 *.pyc
 store-core-test-dir/
+.lein-failures
+checkouts
