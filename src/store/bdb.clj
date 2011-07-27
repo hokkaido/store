@@ -33,7 +33,7 @@
     (read-string (String. data "UTF-8"))
     nil))
 
-(defn to-entry [clj]
+(defn ^DatabaseEntry to-entry [clj]
   (DatabaseEntry. (.getBytes (pr-str clj) "UTF-8")))
 
 (defn cursor-next
@@ -66,14 +66,14 @@
               (.set queued (get-next))
               res)))))
 
-(defn bdb-conf [read-only-db deferred-write cache-mode]
+(defn ^DatabaseConfig bdb-conf [read-only-db deferred-write cache-mode]
   (doto (DatabaseConfig.)
     (.setReadOnly read-only-db)
     (.setAllowCreate (not read-only-db))
     (.setDeferredWrite deferred-write)
     (.setCacheMode (cache-modes cache-mode))))
 
-(defn- bdb-env
+(defn- ^Environment bdb-env
   "Parameters:
    :path - bdb environment path
    :read-only - set bdb environment to be read-only
@@ -161,7 +161,7 @@
       ret)))
 
 (defmethod bucket :bdb
-  [{:keys [name path cache cache-mode read-only deferred-write merge]
+  [{:keys [^String name path cache cache-mode read-only deferred-write merge]
     :or {cache-mode :evict-ln
 	 read-only false
 	 deferred-write false}

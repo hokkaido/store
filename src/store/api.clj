@@ -31,23 +31,40 @@
        (ConcurrentHashMap.)
        hashmap-bucket))
 
+(set! *warn-on-reflection* 1)
+
+(declare bucket-ops store-op)
+
+(deftype Store [bucket-map context]
+  clojure.lang.IFn
+   (invoke [this op]
+	  (store-op this op nil))
+  (invoke [this op bucket-name]
+	  (store-op this op bucket-name))
+  (invoke [this op bucket-name key]
+	  (store-op this op bucket-name key))
+  (invoke [this op bucket-name key val]
+	  (store-op this op bucket-name key val))
+  (applyTo [this args]
+	   (apply store-op this args)))
+
 (def bucket-ops
-     {:buckets (fn [store name]  ;;HACK, don't need name.  just puinting until we do api overahul.
+     {:buckets (fn [^store.api.Store store name]  ;;HACK, don't need name.  just puinting until we do api overahul.
 		(bucket-keys (.bucket-map store)))
-      :bucket (fn [store bucket-name]
+      :bucket (fn [^store.api.Store store bucket-name]
 		(bucket-get (.bucket-map store) bucket-name))
-      :add (fn [store bucket-name]
+      :add (fn [^store.api.Store store bucket-name]
 	     (let [bucket (create-buckets (assoc (.context store)
 					    :name bucket-name))]
 	       (bucket-put
 		(.bucket-map store)
 		bucket-name
 		bucket)))
-      :remove (fn [store bucket-name]
+      :remove (fn [^store.api.Store store bucket-name]
 		(bucket-delete
 		 (.bucket-map store) bucket-name))})
 
-(defn store-op [store op & args]
+(defn store-op [^store.api.Store store op & args]
   (let [name (first args)
 	args (rest args)]
     (if (find bucket-ops op)
@@ -67,18 +84,6 @@
 	    (throw (Exception. (format "No %s operation for bucket %s" read-or-write name)))))
 	(apply f b args)))))
 
-(deftype Store [bucket-map context]
-  clojure.lang.IFn
-   (invoke [this op]
-	  (store-op this op nil))
-  (invoke [this op bucket-name]
-	  (store-op this op bucket-name))
-  (invoke [this op bucket-name key]
-	  (store-op this op bucket-name key))
-  (invoke [this op bucket-name key val]
-	  (store-op this op bucket-name key val))
-  (applyTo [this args]
-	   (apply store-op this args)))
 
 (defn add-bucket [^Store s bucket-name bucket]
   (bucket-put  (.bucket-map s)
@@ -122,7 +127,7 @@
 				 (.shutdownNow pool)))))))))
    
        doall
-       (into {})
+       ^java.util.Map (into {})
        (ConcurrentHashMap.)
        hashmap-bucket))
 
@@ -132,7 +137,7 @@
 	start-flush-pools
 	(Store. context))))
 
-(defn clone [s & [context]]
+(defn clone [^store.api.Store s & [context]]
   (store (bucket-keys (.bucket-map s)) context))
 
 (defn mirror-remote [spec]
