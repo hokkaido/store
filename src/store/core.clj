@@ -95,7 +95,7 @@
     (bucket-seq [this] (bucket-seq read-b))
     (bucket-modified [this k] (bucket-modified read-b k))))
 
-(defn hashmap-bucket [h]
+(defn hashmap-bucket [^ConcurrentHashMap h]
   (reify IReadBucket
 
 	   (bucket-keys [this]

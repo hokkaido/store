@@ -109,7 +109,7 @@
        bucket-seq
        (map-map
 	(fn [{:keys [write,write-spec] :as bucket-spec}]
-	  (let [{:keys [flush-freq]} write-spec]
+	  (let [{:keys [flush-freq,num-flush-threads]} write-spec]
 	    (if-not flush-freq
 	      bucket-spec
 	      (let [pool (doto (Executors/newSingleThreadScheduledExecutor)

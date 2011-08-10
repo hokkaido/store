@@ -123,13 +123,21 @@
    :headers {"Content-Type" "text/javascript; charset=UTF-8"}
    :body (str callback "(" (json/generate-string data) ")")})
 
+(defn seq-post-process [query-params data]
+  (if (query-params "limit")
+    (take (Integer/parseInt (query-params "limit")) data)
+    data))
+
 (defn exec-request
   [s p & args]
   (let [o (p :op)
 	n (p :name)
 	callback (p "callback")]
     (try
-      (let [data (apply s (keyword o) n args)]
+      (let [data (apply s (keyword o) n args)
+	    data (if (#{"seq" "keys"} o)
+		   (seq-post-process p data)
+		   data)]
 	(if callback
 	  (jsonp-response callback data)
 	  (rest-response 200 o data)))
