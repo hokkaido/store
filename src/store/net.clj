@@ -142,7 +142,7 @@
 	  (jsonp-response callback data)
 	  (rest-response 200 o data)))
       (catch Exception e
-	(log/info (format "params: %s %s" (pr-str p) (pr-str args)))
+	(log/info (format "params: %s args: %s" (pr-str p) (pr-str args)))
 	(.printStackTrace e)
 	(rest-response 500 nil {:error (str e)})))))
 

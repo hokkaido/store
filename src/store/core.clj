@@ -11,11 +11,13 @@
            [java.io File]))
 
 (defprotocol IReadBucket
+  (underlying [this] "get the underlying datastore.")
   (bucket-get [this k] "fetch value for key")
   (bucket-batch-get [this ks] "return seq of [k v] pairs")
   (bucket-exists? [this k] "does key-value pair exists")
   (bucket-keys [this] "seq of existing keys")
   (bucket-seq [this] "seq of [k v] elems")
+  (bucket-count [this] "the number of kv pairs in this bucket")
   (bucket-modified [this k] "joda datetime of key modification"))
 
 (defprotocol IWriteBucket

@@ -57,3 +57,20 @@
     (is (= '("k1" "k2" "k4")
            (sort (bucket-keys b))))
     (bucket-close b)))
+
+;;bdb can allow multiple vales for the same key, ensure we are operating in overwrite mode.
+(deftest bdb-duplicate-puts
+  (let [db (new-test-bdb)
+	_ (bucket-put db :foo [1 2 3])
+	_ (bucket-put db :foo [1])]
+    (is (= [1] (bucket-get db :foo)))
+    (is (= 1 (bucket-count db)))
+    (do (bucket-delete db :foo))
+    (is (empty? (bucket-seq db)))
+    (bucket-close db)))
+
+(deftest bdb-count
+  (let [db (new-test-bdb)]
+    (doseq [[k v] (partition-all 2 (range 100))] (bucket-put db k v))
+    (is (= 50 (bucket-count db)))
+    (bucket-close db)))

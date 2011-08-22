@@ -36,6 +36,13 @@
 (defn ^DatabaseEntry to-entry [clj]
   (DatabaseEntry. (.getBytes (pr-str clj) "UTF-8")))
 
+(defn advance [^Cursor cursor]
+  (let [k (DatabaseEntry.)
+        v (doto (DatabaseEntry.)
+	    (.setPartial 0 0 true))]	
+    (.getNext cursor k v LockMode/READ_UNCOMMITTED)
+    cursor))
+
 (defn cursor-next
   "returns a fn which acts as a cursor over db. each call
    returns a [key value] pair. closes cursor when all entries exhausted"
@@ -183,9 +190,13 @@
 			  (when (= (.get db nil entry-key entry-val LockMode/DEFAULT)
 				   OperationStatus/SUCCESS)
 			    (from-entry entry-val))))
+	    (underlying [this] db)
 	    (bucket-batch-get [this ks]
 			      (default-bucket-batch-get this ks))
-	    
+	    ;;This method does an optimized, internal traversal, does not impact the working set in the cache, but may not be accurate in the face of concurrent modifications in the database
+	    ;;see:  http://www.oracle.com/technetwork/database/berkeleydb/je-faq-096044.html#31
+	    (bucket-count [this]
+			  (.count db))
 	    (bucket-keys [this]
 			 (map first
 			      (iterator-seq (cursor-iter db :keys-only true))))
