@@ -3,7 +3,9 @@
         [clojure.java.io :only [file copy make-parents]]
         [clojure.contrib.shell :only [sh]]
 	[plumbing.core :only [?>]]
-	[plumbing.error :only [assert-keys]])
+	[plumbing.error :only [assert-keys]]
+        )
+  (:require [clj-json.core :as json])
   (:import (com.sleepycat.je Database 
                              DatabaseEntry
                              LockMode
@@ -28,13 +30,22 @@
                   :make-cold CacheMode/MAKE_COLD
                   :unchanged CacheMode/UNCHANGED})
 
+(comment
+ (defn from-entry [^DatabaseEntry e]
+   (if-let [data (.getData e)]
+     (read-string (String. data "UTF-8"))
+     nil))
+
+ (defn ^DatabaseEntry to-entry [clj]
+   (DatabaseEntry. (.getBytes (pr-str clj) "UTF-8"))))
+
 (defn from-entry [^DatabaseEntry e]
-  (if-let [data (.getData e)]
-    (read-string (String. data "UTF-8"))
-    nil))
+  (when-let [data (.getData e)]
+    (json/deserialize-snappy data)))
 
 (defn ^DatabaseEntry to-entry [clj]
-  (DatabaseEntry. (.getBytes (pr-str clj) "UTF-8")))
+  (DatabaseEntry. (json/serialize-snappy clj)))
+
 
 (defn advance [^Cursor cursor]
   (let [k (DatabaseEntry.)

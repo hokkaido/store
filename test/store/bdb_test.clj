@@ -8,16 +8,22 @@
 	[plumbing.core :only [find-first]])
   (:import (com.sleepycat.je PreloadConfig)))
 
+(def default-args {:type :bdb
+                   :name "bdb_test"
+                   :path "/tmp/bdbtest/"})
+
 (defn test-bdb [& [args]]
-  (bucket (merge args {:type :bdb
-		       :name "bdb_test"
-		       :path "/tmp/bdbtest/"})))
+  (bucket (merge default-args args)))
 
 (defn new-test-bdb [& [args]]
-  (delete-file-recursively (java.io.File. "/tmp/bdbtest") true)
-  (make-parents (java.io.File. "/tmp/bdbtest/ping"))
-  (delete-file (java.io.File.  "/tmp/bdbtest/ping") true)
-  (test-bdb args))
+  (let [args (merge default-args args)
+        path (:path args)]
+#_    (println path)
+    (assert (> (count path) 5))
+    (delete-file-recursively (java.io.File. path) true)
+    (make-parents (java.io.File. (str path "/ping")))
+    (delete-file (java.io.File.  (str path "/ping")) true)
+    (test-bdb args)))
 
 (deftest bdb-basics
   (let [db (new-test-bdb)
@@ -74,3 +80,17 @@
     (doseq [[k v] (partition-all 2 (range 100))] (bucket-put db k v))
     (is (= 50 (bucket-count db)))
     (bucket-close db)))
+
+
+(comment
+ (defn make-test-bdb []
+   (let [b (new-test-bdb {:path "/Volumes/data/tmp/"})]
+     (time
+      (dotimes [i 10000]
+        (bucket-put b (str i) (apply str (repeat 10000 \x)))))
+     (bucket-close b)))
+
+ (defn seq-test-bdb []
+   (let [b (test-bdb {:path "/Volumes/data/tmp/"})]
+     (time (count (bucket-seq b)))
+     (bucket-close b))))
