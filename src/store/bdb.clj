@@ -182,16 +182,20 @@
 
 (defmethod bucket :bdb
 
-  [{:keys [^String name path cache cache-mode read-only deferred-write merge]
+  [{:keys [^String name path cache read-only-env cache-mode read-only deferred-write merge]
     :or {cache-mode :evict-ln
-	 read-only false
+	 read-only false	 
 	 deferred-write false}
     :as args}]
   (assert (not (contains? args :cache)))  ;;TOOD: remove later.  notifying clients of their broken api call.
   (assert-keys [:name :path] args)
   (let [db-conf (bdb-conf read-only deferred-write cache-mode)
+	
 	;;never open environemtns readonly, see: http://forums.oracle.com/forums/thread.jspa?threadID=2239407&tstart=0
-	env (bdb-env (dissoc args :read-only))
+	env (bdb-env (if read-only-env
+		       (do (assert read-only)			 
+			 (assoc args :read-only true))
+		       (dissoc args :read-only)))
 	db (.openDatabase env nil name db-conf)]
     (->
      (reify IReadBucket
