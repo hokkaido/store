@@ -21,7 +21,6 @@
            (java.util.concurrent Executors Future Callable TimeUnit)
            (org.apache.commons.io IOUtils)))
 
-
 (defn correct-url-encode [k]
   (-> k url-encode (.replaceAll "\\." "%2e")))
 
@@ -182,19 +181,21 @@
       (bucket-seq [this] (exec {:op "seq"}))
       (bucket-exists? [this k] (exec {:op "exists?" :as k}))
       (bucket-keys [this] (exec {:op "keys"}))
+      (bucket-count [this] (throw (UnsupportedOperationException.)))      
       (bucket-batch-get [this ks]
 			(->> ks
 			     (partition-all batch-size)
 			     (mapcat (fn [p] (exec {:op "batch-get" :body p})))))
-      (bucket-modified [this k] (exec {:op "modified" :as k}))
 
+      store.core.IMergeBucket
+      (bucket-merge [this k v]
+		    (exec {:op "merge" :as k :body v}))
+      
       store.core.IWriteBucket
       (bucket-put [this k v] (exec {:op "put" :as k :body v}))
       (bucket-delete [this k] (exec {:op "delete" :as k}))
       (bucket-update [this k f]
 		     (throw (Exception. (format "can not call update on rest bucket %s with key: %s and update fn: %s" this k f))))
-      (bucket-merge [this k v]
-		    (exec {:op "merge" :as k :body v}))
       (bucket-close [this])
       (bucket-sync [this] (exec {:op "sync"})))
      (?> merge with-flush merge))))

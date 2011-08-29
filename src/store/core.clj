@@ -11,14 +11,12 @@
            [java.io File]))
 
 (defprotocol IReadBucket
-  (underlying [this] "get the underlying datastore.")
   (bucket-get [this k] "fetch value for key")
   (bucket-batch-get [this ks] "return seq of [k v] pairs")
   (bucket-exists? [this k] "does key-value pair exists")
   (bucket-keys [this] "seq of existing keys")
   (bucket-seq [this] "seq of [k v] elems")
-  (bucket-count [this] "the number of kv pairs in this bucket")
-  (bucket-modified [this k] "joda datetime of key modification"))
+  (bucket-count [this] "the number of kv pairs in this bucket"))
 
 (defprotocol IWriteBucket
   (bucket-put [this k v]
@@ -26,14 +24,12 @@
   (bucket-delete [this k] "remove key-value pair")
   (bucket-update [this k f])
   (bucket-sync [this])
-  (bucket-close [this])
-  ;; optional merging functins
-  (bucket-merge [this k v] "merge v into current value")
-  (bucket-merger [this] "return the fn used to merge. should be 3 args of [k cur-val new-val]"))
+  (bucket-close [this]))
 
-
+(defprotocol IMergeBucket
+  (bucket-merge [this k v] "merge v into current value"))
+  
 ;;; Default Bucket Operations
-
 (defn default-bucket-exists? [b k]
   (find-first
    (partial = k)
@@ -52,67 +48,28 @@
   (for [k (bucket-keys b)]
     [k (bucket-get b k)]))
 
-(defn default-bucket-keys [b]
-  (map first (bucket-seq b)))
-
 (defn default-bucket-merge [b merge-fn k v]
-  (bucket-update b k (fn [v-to] (merge-fn v-to v))))
+  (assert merge-fn)
+  (bucket-update b k (fn [v-to] (merge-fn k v-to v))))
 
-(defn with-merge [b merge-fn]
-  (reify           
-    IWriteBucket
-    (bucket-put [this k v] (bucket-put b k v))
-    (bucket-delete [this k] (bucket-delete b k))
-    (bucket-update [this k f] (bucket-update b k f))
-    (bucket-sync [this] (bucket-sync b))
-    (bucket-close [this] (bucket-close b))
-    (bucket-merge [this k v]
-                  (default-bucket-merge b (partial merge-fn k) k v))
-    (bucket-merger [this] merge-fn)
 
-    IReadBucket
-    (bucket-get [this k] (bucket-get b k))
-    (bucket-batch-get [this k] (bucket-batch-get b k))
-    (bucket-exists? [this k] (bucket-exists? b k))
-    (bucket-keys [this] (bucket-keys b))
-    (bucket-seq [this] (bucket-seq b))
-    (bucket-modified [this k] (bucket-modified b k))))
-
-(defn compose-buckets [read-b write-b]
-  (reify           
-    IWriteBucket
-    (bucket-put [this k v] (bucket-put write-b k v))
-    (bucket-delete [this k] (bucket-delete write-b k))
-    (bucket-update [this k f] (bucket-update write-b k f))
-    (bucket-sync [this] (bucket-sync write-b))
-    (bucket-close [this] (bucket-close write-b))
-    (bucket-merge [this k v] (bucket-merge write-b k v))
-    (bucket-merger [this] (bucket-merger write-b))
-
-    IReadBucket
-    (bucket-get [this k] (bucket-get read-b k))
-    (bucket-batch-get [this k] (bucket-batch-get read-b k))
-    (bucket-exists? [this k] (bucket-exists? read-b k))
-    (bucket-keys [this] (bucket-keys read-b))
-    (bucket-seq [this] (bucket-seq read-b))
-    (bucket-modified [this k] (bucket-modified read-b k))))
-
-(defn hashmap-bucket [^ConcurrentHashMap h]
+(defn hashmap-bucket [^ConcurrentHashMap h & [merge-fn]]
   (reify IReadBucket
-
 	   (bucket-keys [this]
 			(enumeration-seq (.keys h)))
 	   (bucket-get [this k]
 		       (.get h k))
 	   (bucket-batch-get [this ks] (default-bucket-batch-get this ks))
-       
 	   (bucket-seq [this]
 		       (for [^java.util.Map$Entry e
 			     (.entrySet h)]
 			 [(.getKey e) (.getValue e)]))
+	   (bucket-exists? [this k] (.containsKey h k))
+	   (bucket-count [this] (.size h))
 
-	   (bucket-exists? [this k]
-			   (.containsKey h k))
+	   IMergeBucket
+	   (bucket-merge [this k v]
+			 (default-bucket-merge this merge-fn k v))
 
 	   IWriteBucket
 	   (bucket-put [this k v]
@@ -150,30 +107,7 @@
     (bucket-merge to k v))
   to)
 
-(defn bucket-flush-seq! [b]
-  (for [k (bucket-keys b)
-	:let [v (bucket-delete b k)]
-	:when v]
-    [k v]))
 
- (defn bucket-flush-to!
-  "merge takes (k to-value from-value)"
-  [from tos]
-  (doseq [[k v] (bucket-flush-seq! from)
-	  to tos]
-    (bucket-merge to k v)))
-
-(defn with-multicast
-  [buckets]
-  (reify
-    store.core.IWriteBucket
-    (bucket-put [this k v]
-                (doseq [b buckets]
-                  (bucket-put b k v)))))
-
-(defn add-write-listeners [b listener-buckets]
-  (compose-buckets b     
-     (with-multicast (cons b listener-buckets))))
 
 
 ;;TODO: remove flush check, moving away from legacy api.
@@ -181,40 +115,48 @@
 		   (or (:type %) :mem)))
 
 (defn with-flush
-  "takes a bucket that has with-merge and returns an in-memory bucket which will use bucket-merge to merge values using the flush-merge-fn and when bucket-sync is called on return bucket
-  will flush memory bucket into underlying bucket using underyling bucket merge fn"
-  ([b]
-     (with-flush b (bucket-merger
-                    (if (coll? b) (first b) b))))
+  "Takes a bucket with a merge fn and wraps with an in-memory cache that can be flushed with bucket-sync.
+   Read operations read from the underlying store, and will not reflect unflushed writes."
   ([b merge-fn]
-     (let [buckets (if (coll? b) b [b])
-           mem-bucket (with-merge (bucket {:type :mem}) merge-fn)
-           do-flush! #(bucket-flush-to! mem-bucket buckets)]
-       (->> (reify
-	    store.core.IWriteBucket
-	    (bucket-merge [this k v]
-			  (bucket-merge mem-bucket k v))
-	    (bucket-update [this k f]
-			   (bucket-update mem-bucket k f))
-	    (bucket-sync [this]
-			 (do-flush!)
-			 (doseq [b buckets]
-			    (bucket-sync b)))
-	    (bucket-close [this]
-			  (do-flush!)
-			  (doseq [b buckets]
-			    (bucket-close b)))
-	    ;;WARNING: This is not a precise delete, it can fail to delete elements from the underlying bucket because we do not hold a lock around the compound operation of deleting from the memory merge bucket and the on disk target buckets.
-	    (bucket-delete [this k]
-			   (doseq [b (cons mem-bucket
-					   buckets)]
-			     (bucket-delete b k))))
-	   (compose-buckets b)))))
+     (let [mem-bucket (bucket {:type :mem})
+           do-flush! #(doseq [k (bucket-keys mem-bucket)]
+			(let [[v op] (bucket-delete mem-bucket k)]
+			  (case op
+				:delete (bucket-delete b k)
+				:put    (bucket-put b k v)
+				:update (bucket-merge b k v))))]
+       (reify
+	IReadBucket
+	(bucket-get [this k] (bucket-get b k))
+	(bucket-exists? [this k] (bucket-exists? b k))
+	(bucket-keys [this] (bucket-keys b))
+	(bucket-count [this] (bucket-count b))
+	(bucket-batch-get [this ks] (bucket-batch-get b ks))
+	(bucket-seq [this] (bucket-seq b))     
+	
+	IMergeBucket
+	(bucket-merge [this k v]
+		      (bucket-update this k #(merge-fn k % v)))
 
-(defn with-merge-and-flush [bucket flush]
-  (-> bucket
-      (with-merge flush)
-      (with-flush flush)))
+	IWriteBucket
+	(bucket-update [this k f]
+		       (bucket-update
+			mem-bucket k
+			(fn [old-tuple]
+			  (let [[val op] (or old-tuple [nil :update])]
+			    [(f val) (if (= op :delete) :put op)]))))
+	(bucket-delete [this k]
+		       (bucket-put mem-bucket k [nil :delete]))
+	(bucket-put [this k v]
+		    (bucket-put mem-bucket k [v :put]))
+
+	(bucket-sync [this]
+		     (do-flush!)
+		     (bucket-sync b))
+	(bucket-close [this]
+		      (do-flush!)
+		      (bucket-close b))))))
+
 
 (defmethod bucket :fs [{:keys [name path merge] :as args}]
 	   (assert-keys [:name :path] args)
@@ -223,7 +165,7 @@
 		     (file dir-path)
 		     dir-path)]
 	     (.mkdirs f)
-	     (->
+	     (?>
 	      (reify
 	       IReadBucket
 	       (bucket-get [this k]
@@ -238,10 +180,13 @@
 			    (for [^File c (.listFiles f)
 				  :when (and (.isFile c) (not (.isHidden c)))]
 			      (ring/url-decode (.getName c))))
-	       (bucket-modified [this k]
-				(time.coerce/from-long
-				 (.lastModified (File. dir-path 
-						       ^String (ring/url-encode k)))))
+	       (bucket-count [this] (count (bucket-keys this)))
+	       
+
+	       IMergeBucket
+	       (bucket-merge [this k v]
+		  (default-bucket-merge this merge k v))
+
 	       
 	       IWriteBucket
 	       (bucket-put [this k v]
@@ -254,14 +199,10 @@
 			      (default-bucket-update this k f))
 	       (bucket-sync [this] nil)
 	       (bucket-close [this] nil))
-	      (?> merge with-merge-and-flush merge))))
-
-
+	      merge with-flush merge)))
 
 (defmethod bucket :mem [{:keys [merge]}]
-  (-> (ConcurrentHashMap.)
-      hashmap-bucket 	     
-      (?> merge with-merge merge)))
+	   (hashmap-bucket (ConcurrentHashMap.) merge))
 
 ;;; Extend Read buckets to clojure maps
 
@@ -271,29 +212,13 @@
       :bucket-batch-get (fn [this ks] (default-bucket-batch-get this ks))
       :bucket-keys (fn [this] (keys this))
       :bucket-exists? (fn [this k] (find this k))
-      })
+      :bucket-count (fn [this] (count this))})
+
 
 (doseq [c [clojure.lang.PersistentHashMap
 	   clojure.lang.PersistentArrayMap
 	   clojure.lang.PersistentStructMap]]
   (extend c IReadBucket read-bucket-map-impls))
-
-
-;;; Generic Buckets
-
-(defn caching-bucket [f merge-fn]
-  (let [b (with-merge (bucket {:type :mem}) merge-fn)]
-    (compose-buckets
-     (reify
-      store.core.IReadBucket
-      (bucket-get [this k]
-		  (or (bucket-get b k)	    
-		      (do 
-			(bucket-merge b k (f k))
-			(bucket-get b k))))
-      (bucket-batch-get [this ks] (default-bucket-batch-get this ks)))     
-     b)))
-
 
 (def streaming-ops #{:keys :seq})
 
@@ -309,8 +234,7 @@
        (let [res (default-fn)]
          (bucket-put bucket key res)
          res)))
-   :exists? bucket-exists?
-   :modified bucket-modified})
+   :exists? bucket-exists?})
 
 (def write-ops
      {:put bucket-put

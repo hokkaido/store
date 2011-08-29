@@ -55,21 +55,6 @@
 	    :path (.getAbsolutePath (java.io.File. "store-core-test-dir"))}))
   (.deleteOnExit (java.io.File. "store-core-test-dir")))
 
-(deftest fs-bucket-modified-test
-  (let [b (bucket {:type :fs
-		   :name "foo"
-		   :path (.getAbsolutePath
-		     (java.io.File. "store-core-test-dir"))})]
-    (bucket-put b "k1" "v1")
-    (Thread/sleep 1000)
-    (bucket-put b "k2" "v2")
-    
-    (is (> 5 (time/in-secs
-              (time/interval
-               (bucket-modified b "k1")
-               (time/now)))))
-    (is (time/before? (bucket-modified b "k1")
-                      (bucket-modified b "k2")))))
 
 (deftest fs-store-test
   (let [root (java.io.File. ".")
@@ -87,84 +72,32 @@
 
 (deftest flush-test
   (let [b1 (bucket {:type :mem})
-        b2 (bucket {:type :mem})]
+        b2 (bucket {:type :mem :merge (fn [_ v1 v2] (merge v1 v2))})]
     (bucket-put b1 :foo {:bar "bar"})
     (bucket-put b1 :nutty {:mcsackhang "mcsackhang"})
-    (bucket-merge-to! b1 (with-merge b2 (fn [_ v1 v2] (merge v1 v2))))
+    (bucket-merge-to! b1 b2)
     (is (= (into {} (bucket-seq b2))
 	   (into {} (bucket-seq b1))))
-    (bucket-merge-to! {:bar {:balls "deep"}}
-		      (with-merge b2 (fn [k v1 v2]
-					(merge v1 v2))))
+    (bucket-merge-to! {:bar {:balls "deep"}} b2)
     (is (= {:bar {:balls "deep"}
 	    :foo {:bar "bar"}
 	    :nutty {:mcsackhang "mcsackhang"}}
 	   (into {} (bucket-seq b2))))))
 
 (deftest with-flush-test
-  (let [merge (fnil (fn [_ v1 v2] (merge v1 v2)) {})
-	b1 (with-merge (bucket {:type :mem}) merge)
-	b2 (with-flush b1 merge)]
+  (let [merge-fn (fnil (fn [_ v1 v2] (merge v1 v2)) {})
+	b1 (bucket {:type :mem :merge merge-fn})
+	b2 (with-flush b1 merge-fn)]
     (bucket-merge b2 "k" {"v1" "v"})
     (is (nil? (bucket-get b1 "k")))
     (bucket-sync b2)
     (is (= (bucket-get b1 "k") {"v1" "v"}))))
 
-(deftest with-flush-multicast-test
-  (let [shitty-bucket #(with-merge
-                         (bucket {:type :mem})
-                         (fnil (fn [_ v1 v2] (merge v1 v2)) {}))
-        remote-buckets
-        [(shitty-bucket)
-         (shitty-bucket)]
-        local-bucket (shitty-bucket)
-        b2 (with-flush (cons local-bucket remote-buckets))]
-    (bucket-merge b2 "k" {"v1" "v"})
-    (doseq [x (cons local-bucket remote-buckets)]
-      (is (nil? (bucket-get x "k"))))
-    (bucket-sync b2)
-    (doseq [x remote-buckets]
-      (is (= (bucket-get x "k")  {"v1" "v"})))))
 
-(deftest with-multicast-test
-  (let [b1 (bucket {:type :mem})
-        b2 (bucket {:type :mem})
-        mb (with-multicast [b1 b2])]
-    (bucket-put mb "k1" "v1")
-    (bucket-put mb "k2" "v2")
-    (are [x y] (= x y)
-         "v1" (bucket-get b1 "k1")
-         "v2" (bucket-get b1 "k2")
-         "v1" (bucket-get b2 "k1")
-         "v2" (bucket-get b2 "k2"))))
-
-(deftest caching-bucket-test
-  (let [b {:a [1 2] :b [3 4]}
-	caching (caching-bucket
-		   b
-		   (fn [_ sum vals]
-		     (+ (or sum 0) (reduce + vals))))]
-    (is (= 3 (bucket-get caching :a)))
-    (is (= 7 (bucket-get caching :b)))
-    (bucket-merge caching :a [3 4])
-    (is (= 10 (bucket-get caching :a)))))
-
-(deftest add-listeners-test
-  (let [b  (bucket {:type :mem})
-	b1 (bucket {:type :mem})
-        b2 (bucket {:type :mem})
-        mb (add-write-listeners b [b1 b2])]
-    (bucket-put mb "k1" "v1")
-    (is (= (bucket-seq mb)  [["k1" "v1"]]))
-    (is (= (bucket-get mb "k1") "v1"))
-    (is (= (bucket-get b1 "k1") "v1"))
-    (is (= (bucket-get b2 "k1") "v1"))))
 
 (deftest bucket-counting-merge-test
   (let [n 1000
-	b (with-merge
-	      (bucket {:type :mem})
-	      (fn [_ sum x] (+ (or sum 0) x)))
+	b (bucket {:type :mem :merge (fn [_ sum x] (+ (or sum 0) x))})
 	latch (java.util.concurrent.CountDownLatch. n)
 	pool (java.util.concurrent.Executors/newFixedThreadPool 10)]
     (dotimes [_ n]

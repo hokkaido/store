@@ -66,16 +66,20 @@
      (reify store.core.IReadBucket
 	    (bucket-keys [this]
 			 (get-keys s3 bucket-name))
-
 	    (bucket-get [this k]
 			(get-clj s3 bucket-name (str k)))
-    
 	    (bucket-exists? [this k]
 			    (some #(= k (.getKey %))
 				  (-> s3 (objects bucket-name (str k)) seq)))
-
 	    (bucket-seq [this] (default-bucket-seq this))	 
-	 
+	    (bucket-batch-get [this ks] (throw (UnsupportedOperationException.)))
+	    (bucket-count [this] (throw (UnsupportedOperationException.)))
+
+	    IMergeBucket
+	    (bucket-merge [this k v]
+			  (default-bucket-merge this merge k v))
+
+	    
 	    store.core.IWriteBucket
 	    (bucket-put [this k v]
 			(put-clj s3 bucket-name (str k) v))
@@ -84,5 +88,7 @@
 			   (delete-object s3 bucket-name (str k)))
     
 	    (bucket-update [this k f]
-			   (default-bucket-update this k f)))
-     (?> merge with-merge-and-flush merge))))
+			   (default-bucket-update this k f))
+	    (bucket-close [this] (throw (UnsupportedOperationException.)))
+	    (bucket-sync [this] (throw (UnsupportedOperationException.))))
+     (?> merge with-flush merge))))

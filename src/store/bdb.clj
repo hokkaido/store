@@ -205,7 +205,6 @@
 			  (when (= (.get db nil entry-key entry-val LockMode/DEFAULT)
 				   OperationStatus/SUCCESS)
 			    (from-entry entry-val))))
-	    (underlying [this] db)
 	    (bucket-batch-get [this ks]
 			      (default-bucket-batch-get this ks))
 	    ;;This method does an optimized, internal traversal, does not impact the working set in the cache, but may not be accurate in the face of concurrent modifications in the database
@@ -224,9 +223,13 @@
 			      (.setPartial entry-val (int 0) (int 0) true)
 			      (= (.get db nil entry-key entry-val LockMode/DEFAULT)
 				 OperationStatus/SUCCESS)))
+	    
+	    IMergeBucket
+	    (bucket-merge [this k v]
+			  (default-bucket-merge this merge k v))
 
+	    
 	    IWriteBucket
-
 	    (bucket-put [this k v]
 			(let [entry-key (to-entry k)
 			      entry-val (to-entry v)]
@@ -242,4 +245,4 @@
 			  (do 
 			    (.close db)
 			    (.close env))))
-     (?> merge with-merge-and-flush merge))))
+     (?> merge with-flush merge))))
