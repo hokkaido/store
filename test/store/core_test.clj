@@ -91,9 +91,10 @@
     (bucket-merge b2 "k" {"v1" "v"})
     (is (nil? (bucket-get b1 "k")))
     (bucket-sync b2)
-    (is (= (bucket-get b1 "k") {"v1" "v"}))))
-
-
+    (is (= (bucket-get b1 "k") {"v1" "v"}))
+    (is (= {"v1" "v"} (bucket-delete b2 "k")))
+    (bucket-sync b2)
+    (is (nil? (bucket-get b2 "k")))))
 
 (deftest bucket-counting-merge-test
   (let [n 1000

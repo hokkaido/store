@@ -124,7 +124,6 @@
            do-flush! #(doseq [k (bucket-keys mem-bucket)]
 			(let [[v op] (bucket-delete mem-bucket k)]
 			  (case op
-				:delete (bucket-delete b k)
 				:put    (bucket-put b k v)
 				:update (bucket-merge b k v))))]
        (reify
@@ -146,9 +145,10 @@
 			mem-bucket k
 			(fn [old-tuple]
 			  (let [[val op] (or old-tuple [nil :update])]
-			    [(f val) (if (= op :delete) :put op)]))))
+			    [(f val) op]))))
 	(bucket-delete [this k]
-		       (bucket-put mem-bucket k [nil :delete]))
+		       (bucket-delete mem-bucket k)
+		       (bucket-delete b k))
 	(bucket-put [this k v]
 		    (bucket-put mem-bucket k [v :put]))
 
