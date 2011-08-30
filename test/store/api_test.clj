@@ -72,3 +72,39 @@
       (c :put "bar" :b 2)
       (= 2 (c :get "bar" :b))
       (= 1 (s :get "foo" :a)))))
+
+(deftest merge-stores-test
+  (let [a (store ["a"])
+	b (store ["b"])
+	ab (merge-stores a b)]
+    (ab :put "a" "1" "1")
+    (ab :put "b" "2" "2")
+    (is (= "1" (ab :get "a" "1")))
+    (is (= "2" (ab :get "b" "2")))))
+
+(deftest copy-test
+  (let [a (store ["a"])
+	b (store ["a"])
+	kvs (map (fn [k]
+		   [k {:hang k :bang k}])
+		 (range 10000))]
+    (doseq [[k v] kvs]
+      (a :put "a" k v))
+    (copy a b "a" :select :hang :threads 10)
+    (is (= 10000 (count (a :keys "a"))))
+    (is (= (range 10000)
+	   (sort (map second (b :seq "a")))))))
+
+(deftest sync-test
+  (let [a (store ["a"])
+	b (store ["a"])
+	kvs (map (fn [k]
+		   [k {:hang k :bang k}])
+		 [1 2 3 4 5])]
+    (doseq [[k v] kvs]
+      (a :put "a" k v))
+    (b :put "a" 3 100)
+    (sync a b "a" :select :hang :threads 10)
+    (is (= 5 (count (a :keys "a"))))
+    (is (= [1 2 4 5 100]
+	   (sort (map second (b :seq "a")))))))

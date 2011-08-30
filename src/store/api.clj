@@ -143,3 +143,23 @@
   (let [s (store [] spec)
 	ks (s :buckets)]
     (store ks spec)))
+
+(defn copy [in out bucket & {:keys [select skip]  ;;skip to skip keys
+			     :or {select identity ;;select to select values
+				  threads 10
+				  block-size 100}}]
+  (doseq [[k v] (->> (in :seq bucket)
+		     (?>> skip filter (comp skip first)))
+	  :let [vs (select v)]]
+    (out :put bucket k vs))
+  (out :sync bucket))
+
+(defn sync [in out bucket & args]
+  (apply copy in out bucket
+	 (concat args [:skip
+		       (complement (partial out :get bucket))])))
+
+(defn merge-stores [host other]
+  (doseq [[k v] (bucket-seq (.bucket-map other))]
+    (bucket-put (.bucket-map host) k v))
+  host)
