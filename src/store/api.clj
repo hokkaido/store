@@ -154,7 +154,7 @@
     (out :put bucket k vs))
   (out :sync bucket))
 
-(defn sync [in out bucket & args]
+(defn sync-stores [in out bucket & args]
   (apply copy in out bucket
 	 (concat args [:skip
 		       (complement (partial out :get bucket))])))

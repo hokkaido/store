@@ -1,3 +1,4 @@
+
 (ns store.bdb
   (:use store.core
         [clojure.java.io :only [file copy make-parents]]
@@ -5,7 +6,8 @@
 	[plumbing.core :only [?>]]
 	[plumbing.error :only [assert-keys]]
         )
-  (:require [clj-json.core :as json])
+  (:require [clj-json.core :as json]
+	    [clojure.contrib.logging :as log])
   (:import (com.sleepycat.je Database 
                              DatabaseEntry
                              LockMode
@@ -74,13 +76,31 @@
 	[(from-entry k)
 	 (from-entry v)]))))
 
+(defprotocol PCloser
+  (justClosed [this]))
+
+(deftype Closer [^Cursor cursor ^{:unsynchronized-mutable true} closed?]
+  Object
+  (finalize [this]
+    (when-not closed?
+      (log/info (str "Warning: leaked BDB cursor " cursor this))
+      (.close cursor)))
+
+  PCloser
+  (justClosed [this] (set! closed? true)))
+
+
 (defn cursor-seq [^Database db & {:keys [keys-only]
 				  :or {keys-only false}}]
-  (let [cursor (.openCursor db nil (doto (CursorConfig.) (.setReadUncommitted true)))]
-    ((fn make-seq []
+  (let [cursor (.openCursor db nil (doto (CursorConfig.) (.setReadUncommitted true)))
+	dummy (Closer. cursor false)]
+    ;; TODO: maybe add background read-ahead to speed up, e.g., over REST.
+    ((fn make-seq [dummy]
        (lazy-seq 
-	(when-let [x (cursor-next cursor keys-only)]
-	  (cons x (make-seq))))))))
+	(if-let [x (cursor-next cursor keys-only)]
+	  (cons x (make-seq dummy))
+	  (do (justClosed dummy) nil))))
+     dummy)))
 
 (defn optimize-db
   "Walk over the database and rewrite each record, so that subsequent traversals

@@ -104,7 +104,7 @@
     (doseq [[k v] kvs]
       (a :put "a" k v))
     (b :put "a" 3 100)
-    (sync a b "a" :select :hang :threads 10)
+    (sync-stores a b "a" :select :hang :threads 10)
     (is (= 5 (count (a :keys "a"))))
     (is (= [1 2 4 5 100]
 	   (sort (map second (b :seq "a")))))))

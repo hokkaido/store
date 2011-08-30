@@ -100,7 +100,7 @@
    (let [b (new-test-bdb)]
      (time
       (dotimes [i 1000000]
-        (bucket-put b (rand-int 10000000) "foo")))
+        (bucket-put b i #_ (rand-int 10000000) "foo")))
      (bucket-close b)))
 
  (defn funny-seq [b]
