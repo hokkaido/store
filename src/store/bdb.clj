@@ -76,6 +76,28 @@
 	[(from-entry k)
 	 (from-entry v)]))))
 
+
+(defn seque3 [n seq-fn]
+  (let [q (java.util.concurrent.LinkedBlockingQueue. (int n))
+        NIL (Object.)]  ;nil sentinel since LBQ doesn't support nils
+    (future
+      (try
+        (loop [s (seq  (seq-fn))]
+          (if s
+            (do (let [x (first s)] (.put q (if (nil? x) NIL x)))
+                (recur (next s)))
+            (.put q q))) ; q itself is eos sentinel
+        (catch Exception e
+          (.put q q)
+          (println "Swallowing exception" e)
+          (throw e))))
+    
+    ((fn drain []
+       (lazy-seq
+        (let [x (.take q)]
+          (when-not (identical? x q)    ;q itself is eos sentinel
+            (cons (if (identical? x NIL) nil x) (drain)))))))))
+
 (defprotocol PCloser
   (justClosed [this]))
 
@@ -92,15 +114,16 @@
 
 (defn cursor-seq [^Database db & {:keys [keys-only]
 				  :or {keys-only false}}]
-  (let [cursor (.openCursor db nil (doto (CursorConfig.) (.setReadUncommitted true)))
-	dummy (Closer. cursor false)]
-    ;; TODO: maybe add background read-ahead to speed up, e.g., over REST.
-    ((fn make-seq [dummy]
-       (lazy-seq 
-	(if-let [x (cursor-next cursor keys-only)]
-	  (cons x (make-seq dummy))
-	  (do (justClosed dummy) nil))))
-     dummy)))
+ 
+  (seque3 64 
+          #(let [cursor (.openCursor db nil (doto (CursorConfig.) (.setReadUncommitted true)))
+                 dummy (Closer. cursor false)]             
+             ((fn make-seq [dummy]
+                (lazy-seq 
+                 (if-let [x (cursor-next cursor keys-only)]
+                 (cons x (make-seq dummy))
+                 (do (justClosed dummy) nil))))
+            dummy))))
 
 (defn optimize-db
   "Walk over the database and rewrite each record, so that subsequent traversals
