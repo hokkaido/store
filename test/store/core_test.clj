@@ -8,7 +8,7 @@
 (defn generic-bucket-test [b]
   (bucket-put b "k1" "v1")
   (is (= (bucket-get b "k1") "v1"))
-  (is (find-first (partial = "k1") (bucket-keys b)))
+  (is (= 1 (count (filter (partial = "k1") (bucket-keys b)))))
   (is (bucket-exists? b "k1"))
   (bucket-delete b "k1")
   (is (not (bucket-exists? b "k1")))

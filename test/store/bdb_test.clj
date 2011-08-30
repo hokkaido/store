@@ -29,7 +29,7 @@
   (let [db (new-test-bdb)
 	_ (bucket-put db :foo [1 2 3])]
     (is (= [1 2 3] (bucket-get db :foo)))
-    (is (= [:foo [1 2 3]] (first (bucket-seq db))))
+    (is (= [:foo [1 2 3]] (first (doall (bucket-seq db)))))
     (do (bucket-delete db :foo))
     (is (empty? (bucket-seq db)))
     (bucket-close db)))
@@ -82,7 +82,7 @@
     (bucket-close db)))
 
 
-(comment
+(comment ;; For testing speed of raw BDB IO (serialization, compression,  etc)
  (defn make-test-bdb []
    (let [b (new-test-bdb {:path "/Volumes/data/tmp/"})]
      (time
@@ -93,4 +93,24 @@
  (defn seq-test-bdb []
    (let [b (test-bdb {:path "/Volumes/data/tmp/"})]
      (time (count (bucket-seq b)))
+     (bucket-close b))))
+
+(comment ;; For testing speed of seqing bdb
+ (defn make-test-bdb []
+   (let [b (new-test-bdb)]
+     (time
+      (dotimes [i 1000000]
+        (bucket-put b (rand-int 10000000) "foo")))
+     (bucket-close b)))
+
+ (defn funny-seq [b]
+   (->> (bucket-keys b)
+	(partition-all 100)
+	(work.core/map-work (partial bucket-batch-get b) 10)))
+ 
+ (defn seq-test-bdb []
+   (let [b (test-bdb)]
+     (dotimes [i 3]
+      (println (time (count (bucket-seq b))))
+      (println (time (count (apply concat (funny-seq b))))))     
      (bucket-close b))))

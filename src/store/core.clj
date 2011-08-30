@@ -28,6 +28,9 @@
 
 (defprotocol IMergeBucket
   (bucket-merge [this k v] "merge v into current value"))
+
+(defprotocol IOptimizeBucket
+  (bucket-optimize [this] "optimize for in order reads from disk on :keys and :seq requests"))
   
 ;;; Default Bucket Operations
 (defn default-bucket-exists? [b k]
@@ -51,7 +54,6 @@
 (defn default-bucket-merge [b merge-fn k v]
   (assert merge-fn)
   (bucket-update b k (fn [v-to] (merge-fn k v-to v))))
-
 
 (defn hashmap-bucket [^ConcurrentHashMap h & [merge-fn]]
   (reify IReadBucket
@@ -227,13 +229,7 @@
    :batch-get bucket-batch-get
    :seq bucket-seq
    :keys bucket-keys
-   :get-ensure
-   (fn [bucket key default-fn]
-     (if-let [v (bucket-get bucket key)]
-       v
-       (let [res (default-fn)]
-         (bucket-put bucket key res)
-         res)))
+   :count bucket-count
    :exists? bucket-exists?})
 
 (def write-ops
@@ -242,4 +238,5 @@
       :merge bucket-merge
       :update bucket-update
       :sync bucket-sync
-      :close bucket-close})
+      :close bucket-close
+      :optimize bucket-optimize})

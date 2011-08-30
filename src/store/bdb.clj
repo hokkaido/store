@@ -13,6 +13,7 @@
                              EnvironmentConfig
                              DatabaseConfig
                              Cursor
+			     CursorConfig
                              OperationStatus
                              CheckpointConfig
                              CacheMode)
@@ -57,8 +58,7 @@
 (defn cursor-next
   "returns a fn which acts as a cursor over db. each call
    returns a [key value] pair. closes cursor when all entries exhausted"
-  [^Cursor cursor & {:keys [keys-only]
-                     :or {keys-only false}}]
+  [^Cursor cursor keys-only]
   (let [k (DatabaseEntry.)
         v (if keys-only
             (doto (DatabaseEntry.)
@@ -69,20 +69,30 @@
       ;; return nil
       (do (.close cursor)
           nil)
-      [(from-entry k)
-       (from-entry v)])))
+      (if keys-only
+	(from-entry k)
+	[(from-entry k)
+	 (from-entry v)]))))
 
-(defn cursor-iter [^Database db & {:keys [keys-only]
-                                   :or {keys-only false}}]
-  (let [cursor (.openCursor db nil nil)
-        get-next #(cursor-next cursor :keys-only keys-only)
-        queued (java.util.concurrent.atomic.AtomicReference. (get-next))]
-    (reify java.util.Iterator
-      (hasNext [this] (boolean (.get queued)))
-      (next [this]
-            (let [res (.get queued)]
-              (.set queued (get-next))
-              res)))))
+(defn cursor-seq [^Database db & {:keys [keys-only]
+				  :or {keys-only false}}]
+  (let [cursor (.openCursor db nil (doto (CursorConfig.) (.setReadUncommitted true)))]
+    ((fn make-seq []
+       (lazy-seq 
+	(when-let [x (cursor-next cursor keys-only)]
+	  (cons x (make-seq))))))))
+
+(defn optimize-db
+  "Walk over the database and rewrite each record, so that subsequent traversals
+   will be in sequential order on disk"
+  [^Database db]
+  (let [cursor (.openCursor db nil (doto (CursorConfig.) (.setReadUncommitted true)))
+	k (DatabaseEntry.)
+	v (DatabaseEntry.)]
+    (while (= (.getNext cursor k v LockMode/READ_UNCOMMITTED)
+	      OperationStatus/SUCCESS)
+      (.putCurrent cursor v))
+    (.close cursor)))
 
 (defn ^DatabaseConfig bdb-conf [read-only-db deferred-write cache-mode]
   (doto (DatabaseConfig.)
@@ -212,10 +222,9 @@
 	    (bucket-count [this]
 			  (.count db))
 	    (bucket-keys [this]
-			 (map first
-			      (iterator-seq (cursor-iter db :keys-only true))))
+			 (cursor-seq db :keys-only true))
 	    (bucket-seq [this]
-			(iterator-seq (cursor-iter db)))
+			(cursor-seq db))
 
 	    (bucket-exists? [this k]
 			    (let [entry-key (to-entry k)
@@ -223,6 +232,9 @@
 			      (.setPartial entry-val (int 0) (int 0) true)
 			      (= (.get db nil entry-key entry-val LockMode/DEFAULT)
 				 OperationStatus/SUCCESS)))
+
+	    IOptimizeBucket
+	    (bucket-optimize [this] (optimize-db db))
 	    
 	    IMergeBucket
 	    (bucket-merge [this k v]

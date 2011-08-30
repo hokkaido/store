@@ -187,6 +187,9 @@
 			     (partition-all batch-size)
 			     (mapcat (fn [p] (exec {:op "batch-get" :body p})))))
 
+      store.core.IOptimizeBucket
+      (bucket-optimize [this] (exec {:op "optimize"}))
+
       store.core.IMergeBucket
       (bucket-merge [this k v]
 		    (exec {:op "merge" :as k :body v}))
