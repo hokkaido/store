@@ -34,23 +34,19 @@
                   :make-cold CacheMode/MAKE_COLD
                   :unchanged CacheMode/UNCHANGED})
 
-(comment ;; Old serialization methods -- use read-string and pr-str
- (defn from-entry [^DatabaseEntry e]
-   (if-let [data (.getData e)]
-     (read-string (String. data "UTF-8"))
-     nil))
+(defn to-str [clj]
+  (.getBytes (pr-str clj) "UTF-8"))
 
- (defn ^DatabaseEntry to-entry [clj]
-   (DatabaseEntry. (.getBytes (pr-str clj) "UTF-8"))))
+(defn from-str [data]
+  (when data
+    (read-string (String. data "UTF-8"))))
 
-
-(defn from-entry [^DatabaseEntry e]
-  (when-let [data (.getData e)]
+(defn from-snappy [data]
+  (when data
     (json/deserialize-snappy data)))
 
-(defn ^DatabaseEntry to-entry [clj]
-  (DatabaseEntry. (json/serialize-snappy clj)))
-
+(defn to-snappy [clj]
+  (json/serialize-snappy clj))
 
 (defn advance [^Cursor cursor]
   (let [k (DatabaseEntry.)
@@ -62,7 +58,7 @@
 (defn cursor-next
   "returns a fn which acts as a cursor over db. each call
    returns a [key value] pair. closes cursor when all entries exhausted"
-  [^Cursor cursor keys-only]
+  [^Cursor cursor keys-only deserialize]
   (let [k (DatabaseEntry.)
         v (if keys-only
             (doto (DatabaseEntry.)
@@ -74,10 +70,9 @@
       (do (.close cursor)
           nil)
       (if keys-only
-	(from-entry k)
-	[(from-entry k)
-	 (from-entry v)]))))
-
+	(deserialize (.getData k))
+	[(deserialize (.getData k))
+	 (deserialize (.getData v))]))))
 
 (defn seque3 [observer n seq-fn]
   (let [q (LinkedBlockingQueue. (int n))
@@ -121,7 +116,7 @@
   (justClosed [this] (set! closed? true)))
 
 
-(defn cursor-seq [^Database db observer & {:keys [keys-only]
+(defn cursor-seq [^Database db deserialize observer & {:keys [keys-only]
                                            :or {keys-only false}}]
  
   (seque3 observer 64 
@@ -129,7 +124,7 @@
                  dummy (Closer. cursor false)]             
              ((fn make-seq [dummy]
                 (lazy-seq 
-                 (if-let [x (cursor-next cursor keys-only)]
+                 (if-let [x (cursor-next cursor keys-only deserialize)]
                    (cons x (make-seq dummy))
                    (do (justClosed dummy) nil))))
             dummy))))
@@ -245,10 +240,12 @@
 (defmethod bucket :bdb
 
   [{:keys [^String name path cache read-only-env cache-mode read-only deferred-write merge
-           observer]
+           observer serialize deserialize]
     :or {cache-mode :evict-ln
 	 read-only false	 
-	 deferred-write false}
+	 deferred-write false
+	 serialize to-snappy
+	 deserialize from-snappy}
     :as args}]
   (assert (not (contains? args :cache)))  ;;TOOD: remove later.  notifying clients of their broken api call.
   (assert-keys [:name :path] args)
@@ -263,11 +260,11 @@
     (->
      (reify IReadBucket
 	    (bucket-get [this k]
-			(let [entry-key (to-entry k)
+			(let [entry-key (DatabaseEntry. (serialize k))
 			      entry-val (DatabaseEntry.)]
 			  (when (= (.get db nil entry-key entry-val LockMode/DEFAULT)
 				   OperationStatus/SUCCESS)
-			    (from-entry entry-val))))
+			    (deserialize (.getData entry-val)))))
 	    (bucket-batch-get [this ks]
 			      (default-bucket-batch-get this ks))
 	    ;;This method does an optimized, internal traversal, does not impact the working set in the cache, but may not be accurate in the face of concurrent modifications in the database
@@ -275,13 +272,13 @@
 	    (bucket-count [this]
 			  (.count db))
 	    (bucket-keys [this]
-              (cursor-seq db observer #_ (obs/sub-observer observer (gensym "keyseq"))
+              (cursor-seq db deserialize observer #_ (obs/sub-observer observer (gensym "keyseq"))
                           :keys-only true))
 	    (bucket-seq [this]
-              (cursor-seq db observer #_ (obs/sub-observer observer (gensym "seq"))))
+              (cursor-seq db deserialize observer #_ (obs/sub-observer observer (gensym "seq"))))
 
 	    (bucket-exists? [this k]
-			    (let [entry-key (to-entry k)
+			    (let [entry-key (DatabaseEntry. (serialize k))
 				  entry-val (DatabaseEntry.)]
 			      (.setPartial entry-val (int 0) (int 0) true)
 			      (= (.get db nil entry-key entry-val LockMode/DEFAULT)
@@ -297,11 +294,11 @@
 	    
 	    IWriteBucket
 	    (bucket-put [this k v]
-			(let [entry-key (to-entry k)
-			      entry-val (to-entry v)]
+			(let [entry-key (DatabaseEntry. (serialize k))
+			      entry-val (DatabaseEntry. (serialize v))]
 			  (.put db nil entry-key entry-val)))
 	    (bucket-delete [this k]
-			   (.delete db nil (to-entry k)))
+			   (.delete db nil (DatabaseEntry. (serialize k))))
 	    (bucket-update [this k f]
 			   (default-bucket-update this k f))
 	    (bucket-sync [this]

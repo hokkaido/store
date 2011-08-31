@@ -10,7 +10,6 @@
   (:import [java.util.concurrent Executors TimeUnit
 	    ConcurrentHashMap]))
 
-
 (defn create-buckets [{:keys [name read write] :as spec}]
   (let [spec (update-in spec [:observer] obs/sub-observer name)
         r (bucket (if read (merge spec read) spec))
@@ -159,7 +158,6 @@
   (doseq [[k v] (bucket-seq (.bucket-map other))]
     (bucket-put (.bucket-map host) k v))
   host)
-
 
 (defn observe-merge [ks old v]
   (if old (merge-with + old v) v))
