@@ -31,14 +31,6 @@
     (is (= 42
 	   (s :get "b" :k)))))
 
-(deftest store-add-test
-  (let [s (store [])]
-    (is (not (s :bucket "b")))
-    (add-bucket s "b" (bucket {:type :mem}))
-    (is (s :bucket "b"))
-    (s :put "b" :k 42)
-    (is (= 42
-	   (s :get "b" :k)))))
 
 (deftest start-flush-pools-test
   (let [s (store ["b"] {:merge (fn [_ sum x] (+ (or sum 0) x))

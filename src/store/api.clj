@@ -6,13 +6,14 @@
 	store.net
 	store.bdb
         store.s3)
+  (:require [plumbing.observer :as obs])
   (:import [java.util.concurrent Executors TimeUnit
 	    ConcurrentHashMap]))
 
-(defn create-buckets [{:keys [read write] :as spec}]
-  (let [r (if read
-	    (bucket (merge spec read))
-	    (bucket spec))
+
+(defn create-buckets [{:keys [name read write] :as spec}]
+  (let [spec (update-in spec [:observer] obs/sub-observer name)
+        r (bucket (if read (merge spec read) spec))
 	w (if write
 	    (bucket (merge spec write))
 	    r)]
@@ -35,7 +36,7 @@
 
 (deftype Store [bucket-map context]
   clojure.lang.IFn
-   (invoke [this op]
+  (invoke [this op]
 	  (store-op this op nil))
   (invoke [this op bucket-name]
 	  (store-op this op bucket-name))
@@ -63,11 +64,12 @@
 		 (.bucket-map store) bucket-name))})
 
 (defn store-op [^store.api.Store store op & args]
-  (let [name (first args)
+  (let [{:keys [type observer]} (.context store)
+        name (first args)
 	args (rest args)]
     (if (find bucket-ops op)
-      (let [{:keys [type]} (.context store)
-	    local ((op bucket-ops) store name)]
+      (let [local ((op bucket-ops) store name)]
+        (obs/log observer "store" {op 1})
 	(if-not (= type :rest) local
 		((op rest-bucket-ops) store name)))
       (let [read (read-ops op)
@@ -75,6 +77,7 @@
 	    b (if read (:read spec)
 		  (:write spec))
 	    f (or read (write-ops op))]
+        (obs/log observer name {op 1})
 	(when-not b
 	  (when-not spec
 	    (throw (Exception. (format "No bucket %s" name))))
@@ -82,13 +85,6 @@
 	    (throw (Exception. (format "No %s operation for bucket %s" read-or-write name)))))
 	(apply f b args)))))
 
-
-(defn add-bucket [^Store s bucket-name bucket]
-  (bucket-put  (.bucket-map s)
-	       bucket-name
-	       {:read bucket
-		:write bucket})
-  s)
 
 ;;TODO: fucked, create a coherent model for store flush and shutdown
 (defn flush! [^Store store]
@@ -163,3 +159,16 @@
   (doseq [[k v] (bucket-seq (.bucket-map other))]
     (bucket-put (.bucket-map host) k v))
   host)
+
+
+(defn observe-merge [ks old v]
+  (if old (merge-with + old v) v))
+
+(defn observe-report [m duration]
+  (map-map
+   (fn [{:keys [queue-size] :as b}]
+     (let [{:keys [count size]} queue-size]
+       (if (and count (> count 0))
+         (assoc b :queue-size (/ size 1.0 count))
+         b)))
+   m))

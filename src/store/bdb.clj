@@ -1,4 +1,3 @@
-
 (ns store.bdb
   (:use store.core
         [clojure.java.io :only [file copy make-parents]]
@@ -7,7 +6,8 @@
 	[plumbing.error :only [assert-keys]]
         )
   (:require [clj-json.core :as json]
-	    [clojure.contrib.logging :as log])
+	    [clojure.contrib.logging :as log]
+            [plumbing.observer :as obs])
   (:import (com.sleepycat.je Database 
                              DatabaseEntry
                              LockMode
@@ -19,7 +19,8 @@
                              OperationStatus
                              CheckpointConfig
                              CacheMode)
-           (com.sleepycat.je.util DbBackup)))
+           (com.sleepycat.je.util DbBackup)
+           [java.util.concurrent LinkedBlockingQueue]))
 
 ;;http://download.oracle.com/docs/cd/E17277_02/html/GettingStartedGuide
 
@@ -33,7 +34,7 @@
                   :make-cold CacheMode/MAKE_COLD
                   :unchanged CacheMode/UNCHANGED})
 
-(comment
+(comment ;; Old serialization methods -- use read-string and pr-str
  (defn from-entry [^DatabaseEntry e]
    (if-let [data (.getData e)]
      (read-string (String. data "UTF-8"))
@@ -41,6 +42,7 @@
 
  (defn ^DatabaseEntry to-entry [clj]
    (DatabaseEntry. (.getBytes (pr-str clj) "UTF-8"))))
+
 
 (defn from-entry [^DatabaseEntry e]
   (when-let [data (.getData e)]
@@ -77,9 +79,15 @@
 	 (from-entry v)]))))
 
 
-(defn seque3 [n seq-fn]
-  (let [q (java.util.concurrent.LinkedBlockingQueue. (int n))
-        NIL (Object.)]  ;nil sentinel since LBQ doesn't support nils
+(defn seque3 [observer n seq-fn]
+  (let [q (LinkedBlockingQueue. (int n))
+        NIL (Object.)   ;nil sentinel since LBQ doesn't support nils
+        done? (atom false)]
+    (obs/watch-fn-with-resources!
+      observer :queue-size
+      (fn [^LinkedBlockingQueue q done?]
+        (if @done? obs/*stop-watching* {:count 1 :size (.size q)}))
+      [q done?])
     (future
       (try
         (loop [s (seq  (seq-fn))]
@@ -95,7 +103,8 @@
     ((fn drain []
        (lazy-seq
         (let [x (.take q)]
-          (when-not (identical? x q)    ;q itself is eos sentinel
+          (if (identical? x q)    ;q itself is eos sentinel
+            (do (reset! done? true) nil)
             (cons (if (identical? x NIL) nil x) (drain)))))))))
 
 (defprotocol PCloser
@@ -112,17 +121,17 @@
   (justClosed [this] (set! closed? true)))
 
 
-(defn cursor-seq [^Database db & {:keys [keys-only]
-				  :or {keys-only false}}]
+(defn cursor-seq [^Database db observer & {:keys [keys-only]
+                                           :or {keys-only false}}]
  
-  (seque3 64 
+  (seque3 observer 64 
           #(let [cursor (.openCursor db nil (doto (CursorConfig.) (.setReadUncommitted true)))
                  dummy (Closer. cursor false)]             
              ((fn make-seq [dummy]
                 (lazy-seq 
                  (if-let [x (cursor-next cursor keys-only)]
-                 (cons x (make-seq dummy))
-                 (do (justClosed dummy) nil))))
+                   (cons x (make-seq dummy))
+                   (do (justClosed dummy) nil))))
             dummy))))
 
 (defn optimize-db
@@ -235,7 +244,8 @@
 
 (defmethod bucket :bdb
 
-  [{:keys [^String name path cache read-only-env cache-mode read-only deferred-write merge]
+  [{:keys [^String name path cache read-only-env cache-mode read-only deferred-write merge
+           observer]
     :or {cache-mode :evict-ln
 	 read-only false	 
 	 deferred-write false}
@@ -265,9 +275,10 @@
 	    (bucket-count [this]
 			  (.count db))
 	    (bucket-keys [this]
-			 (cursor-seq db :keys-only true))
+              (cursor-seq db observer #_ (obs/sub-observer observer (gensym "keyseq"))
+                          :keys-only true))
 	    (bucket-seq [this]
-			(cursor-seq db))
+              (cursor-seq db observer #_ (obs/sub-observer observer (gensym "seq"))))
 
 	    (bucket-exists? [this k]
 			    (let [entry-key (to-entry k)
