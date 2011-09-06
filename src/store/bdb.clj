@@ -3,8 +3,7 @@
         [clojure.java.io :only [file copy make-parents]]
         [clojure.contrib.shell :only [sh]]
 	[plumbing.core :only [?>]]
-	[plumbing.error :only [assert-keys]]
-        )
+	[plumbing.error :only [assert-keys]])
   (:require [clj-json.core :as json]
 	    [clojure.contrib.logging :as log]
             [plumbing.observer :as obs])
@@ -115,10 +114,8 @@
   PCloser
   (justClosed [this] (set! closed? true)))
 
-
 (defn cursor-seq [^Database db deserialize observer & {:keys [keys-only]
                                            :or {keys-only false}}]
- 
   (seque3 observer 64 
           #(let [cursor (.openCursor db nil (doto (CursorConfig.) (.setReadUncommitted true)))
                  dummy (Closer. cursor false)]             
@@ -238,7 +235,6 @@
       ret)))
 
 (defmethod bucket :bdb
-
   [{:keys [^String name path cache read-only-env cache-mode read-only deferred-write merge
            observer serialize deserialize]
     :or {cache-mode :evict-ln

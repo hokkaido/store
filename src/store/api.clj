@@ -141,8 +141,7 @@
 
 (defn copy [in out bucket & {:keys [select skip]  ;;skip to skip keys
 			     :or {select identity ;;select to select values
-				  threads 10
-				  block-size 100}}]
+}}]
   (doseq [[k v] (->> (in :seq bucket)
 		     (?>> skip filter (comp skip first)))
 	  :let [vs (select v)]]
