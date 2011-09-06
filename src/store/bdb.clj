@@ -78,11 +78,11 @@
   (let [q (LinkedBlockingQueue. (int n))
         NIL (Object.)   ;nil sentinel since LBQ doesn't support nils
         done? (atom false)]
-    (obs/watch-fn-with-resources!
+    (obs/watch-fn!
       observer :queue-size
       (fn [^LinkedBlockingQueue q done?]
         (if @done? obs/*stop-watching* {:count 1 :size (.size q)}))
-      [q done?])
+      q done?)
     (future
       (try
         (loop [s (seq  (seq-fn))]
@@ -92,7 +92,6 @@
             (.put q q))) ; q itself is eos sentinel
         (catch Exception e
           (.put q q)
-          (println "Swallowing exception" e)
           (throw e))))
     
     ((fn drain []
@@ -249,7 +248,8 @@
     :as args}]
   (assert (not (contains? args :cache)))  ;;TOOD: remove later.  notifying clients of their broken api call.
   (assert-keys [:name :path] args)
-  (let [db-conf (bdb-conf read-only deferred-write cache-mode)
+  (let [observer (obs/sub-observer observer name)
+        db-conf (bdb-conf read-only deferred-write cache-mode)
 	
 	;;never open environemtns readonly, see: http://forums.oracle.com/forums/thread.jspa?threadID=2239407&tstart=0
 	env (bdb-env (if read-only-env
@@ -272,10 +272,10 @@
 	    (bucket-count [this]
 			  (.count db))
 	    (bucket-keys [this]
-              (cursor-seq db deserialize observer #_ (obs/sub-observer observer (gensym "keyseq"))
+              (cursor-seq db deserialize observer 
                           :keys-only true))
 	    (bucket-seq [this]
-              (cursor-seq db deserialize observer #_ (obs/sub-observer observer (gensym "seq"))))
+              (cursor-seq db deserialize observer))
 
 	    (bucket-exists? [this k]
 			    (let [entry-key (DatabaseEntry. (serialize k))

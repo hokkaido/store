@@ -10,9 +10,12 @@
   (:import [java.util.concurrent Executors TimeUnit
 	    ConcurrentHashMap]))
 
-(defn create-buckets [{:keys [name read write] :as spec}]
-  (let [spec (update-in spec [:observer] obs/sub-observer name)
-        r (bucket (if read (merge spec read) spec))
+
+
+
+
+(defn create-buckets [{:keys [read write] :as spec}]
+  (let [r (bucket (if read (merge spec read) spec))
 	w (if write
 	    (bucket (merge spec write))
 	    r)]
@@ -33,18 +36,18 @@
 
 (declare bucket-ops store-op)
 
-(deftype Store [bucket-map context]
+(deftype Store [bucket-map dispatch context]
   clojure.lang.IFn
   (invoke [this op]
-	  (store-op this op nil))
+	  (dispatch this op nil))
   (invoke [this op bucket-name]
-	  (store-op this op bucket-name))
+	  (dispatch this op bucket-name))
   (invoke [this op bucket-name key]
-	  (store-op this op bucket-name key))
+	  (dispatch this op bucket-name key))
   (invoke [this op bucket-name key val]
-	  (store-op this op bucket-name key val))
+	  (dispatch this op bucket-name key val))
   (applyTo [this args]
-	   (apply store-op this args)))
+	   (apply dispatch this args)))
 
 (def bucket-ops
      {:buckets (fn [^store.api.Store store name]  ;;HACK, don't need name.  just puinting until we do api overahul.
@@ -63,12 +66,11 @@
 		 (.bucket-map store) bucket-name))})
 
 (defn store-op [^store.api.Store store op & args]
-  (let [{:keys [type observer]} (.context store)
+  (let [{:keys [type]} (.context store)
         name (first args)
 	args (rest args)]
     (if (find bucket-ops op)
       (let [local ((op bucket-ops) store name)]
-        (obs/log observer "store" {op 1})
 	(if-not (= type :rest) local
 		((op rest-bucket-ops) store name)))
       (let [read (read-ops op)
@@ -76,7 +78,6 @@
 	    b (if read (:read spec)
 		  (:write spec))
 	    f (or read (write-ops op))]
-        (obs/log observer name {op 1})
 	(when-not b
 	  (when-not spec
 	    (throw (Exception. (format "No bucket %s" name))))
@@ -125,11 +126,29 @@
        (ConcurrentHashMap.)
        hashmap-bucket))
 
+(defn observe-merge [ks old v]
+  (if old (merge-with + old v) v))
+
+(defn observe-report [m duration]
+  (map-map
+   (fn [{:keys [queue-size] :as b}]
+     (let [{:keys [count size]} queue-size]
+       (if (and count (> count 0))
+         (assoc b :queue-size (/ size 1.0 count))
+         b)))
+   m))
+
 (defn store [bucket-specs & [context]]
-  (let [context (or context {})]
+  (let [context (update-in (or context {}) [:observer]
+                           obs/sub-observer (obs/gen-key "store"))]
     (-> (buckets bucket-specs context)
 	start-flush-pools
-	(Store. context))))
+	(Store.
+         (obs/observed-fn
+          (:observer context) :counts
+          {:type :counts :group (fn [[_ op b]] [b op])}
+          store-op)
+         context))))
 
 (defn clone [^store.api.Store s & [context]]
   (store (bucket-keys (.bucket-map s)) context))
@@ -158,15 +177,3 @@
   (doseq [[k v] (bucket-seq (.bucket-map other))]
     (bucket-put (.bucket-map host) k v))
   host)
-
-(defn observe-merge [ks old v]
-  (if old (merge-with + old v) v))
-
-(defn observe-report [m duration]
-  (map-map
-   (fn [{:keys [queue-size] :as b}]
-     (let [{:keys [count size]} queue-size]
-       (if (and count (> count 0))
-         (assoc b :queue-size (/ size 1.0 count))
-         b)))
-   m))
