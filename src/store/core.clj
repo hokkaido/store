@@ -109,9 +109,6 @@
     (bucket-merge to k v))
   to)
 
-
-
-
 ;;TODO: remove flush check, moving away from legacy api.
 (defmulti bucket #(do (assert (not (contains? % :flush)))
 		   (or (:type %) :mem)))

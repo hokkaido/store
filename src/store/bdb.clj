@@ -108,16 +108,15 @@
   Object
   (finalize [this]
     (when-not closed?
-      (log/info (str "Warning: leaked BDB cursor " cursor this))
+      (log/warn (str "leaked BDB cursor " cursor this))
       (.close cursor)))
 
   PCloser
   (justClosed [this] (set! closed? true)))
 
 
-(defn cursor-seq [^Database db deserialize observer & {:keys [keys-only]
-                                           :or {keys-only false}}]
- 
+(defn cursor-seq [^Database db deserialize observer
+		  & {:keys [keys-only] :or {keys-only false}}]
   (seque3 observer 64 
           #(let [cursor (.openCursor db nil (doto (CursorConfig.) (.setReadUncommitted true)))
                  dummy (Closer. cursor false)]             
