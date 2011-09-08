@@ -204,6 +204,12 @@
 		      (do-flush!)
 		      (bucket-close b))))))
 
+(defn wrapper-policy [b {:keys [merge cache?] :as args}]
+  (cond
+   (and merge cache?) (with-cache b merge)
+   merge (with-flush b merge)
+   :else b))
+
 (defmethod bucket :fs [{:keys [name path merge] :as args}]
 	   (assert-keys [:name :path] args)
 	   (let [dir-path (str (file path name))
@@ -211,7 +217,7 @@
 		     (file dir-path)
 		     dir-path)]
 	     (.mkdirs f)
-	     (?>
+	     (->
 	      (reify
 	       IReadBucket
 	       (bucket-get [this k]
@@ -231,7 +237,7 @@
 
 	       IMergeBucket
 	       (bucket-merge [this k v]
-		  (default-bucket-merge this merge k v))
+			     (default-bucket-merge this merge k v))
 
 	       
 	       IWriteBucket
@@ -245,7 +251,7 @@
 			      (default-bucket-update this k f))
 	       (bucket-sync [this] nil)
 	       (bucket-close [this] nil))
-	      merge with-flush merge)))
+	      (wrapper-policy args))))
 
 (defmethod bucket :mem [{:keys [merge]}]
 	   (hashmap-bucket (ConcurrentHashMap.) merge))

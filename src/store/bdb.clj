@@ -234,7 +234,8 @@
       ret)))
 
 (defmethod bucket :bdb
-  [{:keys [^String name path cache read-only-env cache-mode read-only deferred-write merge
+  [{:keys [^String name path cache read-only-env cache-mode
+	   read-only deferred-write merge
            observer serialize deserialize]
     :or {cache-mode :evict-ln
 	 read-only false	 
@@ -286,7 +287,6 @@
 	    IMergeBucket
 	    (bucket-merge [this k v]
 			  (default-bucket-merge this merge k v))
-
 	    
 	    IWriteBucket
 	    (bucket-put [this k v]
@@ -304,4 +304,4 @@
 			  (do 
 			    (.close db)
 			    (.close env))))
-     (?> merge with-flush merge))))
+     (wrapper-policy args))))

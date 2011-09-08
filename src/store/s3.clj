@@ -58,8 +58,8 @@
 (defn s3-bucket
   "Takes a S3 connection, a bucket name, and an optional map from logical
   bucket name to actual S3 bucket name."
-  [{:keys [prefix merge name] :as opts}]
-  (let [s3 (s3-connection opts)
+  [{:keys [prefix merge name] :as args}]
+  (let [s3 (s3-connection args)
 	bucket-name (str prefix name)]
     (create-bucket s3 bucket-name)
     (->
@@ -91,4 +91,4 @@
 			   (default-bucket-update this k f))
 	    (bucket-close [this] (throw (UnsupportedOperationException.)))
 	    (bucket-sync [this] (throw (UnsupportedOperationException.))))
-     (?> merge with-flush merge))))
+     (wrapper-policy args))))

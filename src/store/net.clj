@@ -172,8 +172,8 @@
       rest-store-handler
       (start-web {:port port :join? false})))
 		  
-(defmethod bucket :rest [{:keys [batch-size merge] :or {batch-size 10000} :as conf}]
-  (let [exec (mpartial rest-call conf)]
+(defmethod bucket :rest [{:keys [batch-size merge] :or {batch-size 10000} :as args}]
+  (let [exec (mpartial rest-call args)]
     (->
      (reify
       store.core.IReadBucket
@@ -201,4 +201,4 @@
 		     (throw (Exception. (format "can not call update on rest bucket %s with key: %s and update fn: %s" this k f))))
       (bucket-close [this])
       (bucket-sync [this] (exec {:op "sync"})))
-     (?> merge with-flush merge))))
+     (wrapper-policy args))))
