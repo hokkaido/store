@@ -96,6 +96,20 @@
     (bucket-sync b2)
     (is (nil? (bucket-get b2 "k")))))
 
+(deftest with-cache-test
+  (let [merge-fn (fnil (fn [_ v1 v2] (merge v1 v2)) {})
+	b1 (bucket {:type :mem :merge merge-fn})
+	b2 (with-cache b1 merge-fn)]
+    (bucket-merge b2 "k" {"v1" "v"})
+    (is (= {"v1" "v"} (bucket-get b2 "k")))
+    (is (nil? (bucket-get b1 "k")))
+    (bucket-sync b2)
+    (is (= {"v1" "v"} (bucket-get b1 "k")))
+    (is (= {"v1" "v"} (bucket-delete b2 "k")))
+    (is (nil? (bucket-get b2 "k")))
+    (bucket-sync b2)
+    (is (nil? (bucket-get b2 "k")))))
+
 (deftest bucket-counting-merge-test
   (let [n 1000
 	b (bucket {:type :mem :merge (fn [_ sum x] (+ (or sum 0) x))})

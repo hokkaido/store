@@ -109,9 +109,6 @@
     (bucket-merge to k v))
   to)
 
-
-
-
 ;;TODO: remove flush check, moving away from legacy api.
 (defmulti bucket #(do (assert (not (contains? % :flush)))
 		   (or (:type %) :mem)))
@@ -159,6 +156,53 @@
 		      (do-flush!)
 		      (bucket-close b))))))
 
+(defn with-cache
+  ([b merge-fn]
+     (let [mem-bucket (bucket {:type :mem})
+           do-flush! #(doseq [[k [v op]] (bucket-seq mem-bucket)]
+			(case op
+			      :put    (bucket-put b k v)
+			      :update (bucket-merge b k v)))]
+       (reify
+	IReadBucket
+	(bucket-get [this k]
+		    (or (let [[v op :as res] (bucket-get mem-bucket k)]
+			  (case (or op :nil)
+				:put v
+				:nil (or res nil)
+				:update (merge-fn k (bucket-get b k) v)))
+			(when-let [v (bucket-get b k)]
+			  (bucket-merge this k v)
+			  v)))
+	(bucket-exists? [this k] (or (bucket-exists? mem-bucket k) (bucket-exists? b k)))
+	(bucket-keys [this] (throw (UnsupportedOperationException.)))
+	(bucket-count [this] (throw (UnsupportedOperationException.)))
+	(bucket-batch-get [this ks] (default-bucket-batch-get this ks))
+	(bucket-seq [this] (throw (UnsupportedOperationException.)))     
+	
+	IMergeBucket
+	(bucket-merge [this k v]
+		      (bucket-update this k #(merge-fn k % v)))
+
+	IWriteBucket
+	(bucket-update [this k f]
+		       (bucket-update
+			mem-bucket k
+			(fn [old-tuple]
+			  (let [[val op] (or old-tuple [nil :update])]
+			    [(f val) op]))))
+	(bucket-delete [this k]
+		       (bucket-delete mem-bucket k)
+		       (bucket-delete b k))
+	(bucket-put [this k v]
+		    (bucket-put mem-bucket k [v :put]))
+
+	(bucket-sync [this]
+		     (do-flush!)
+		     (bucket-sync b))
+	(bucket-close [this]
+		      (do-flush!)
+		      (bucket-close b))))))
 
 (defmethod bucket :fs [{:keys [name path merge] :as args}]
 	   (assert-keys [:name :path] args)
