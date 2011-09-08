@@ -178,7 +178,7 @@
 	(bucket-keys [this] (throw (UnsupportedOperationException.)))
 	(bucket-count [this] (throw (UnsupportedOperationException.)))
 	(bucket-batch-get [this ks] (default-bucket-batch-get this ks))
-	(bucket-seq [this] (throw (UnsupportedOperationException.)))     
+	(bucket-seq [this] (throw (UnsupportedOperationException.)))
 	
 	IMergeBucket
 	(bucket-merge [this k v]
