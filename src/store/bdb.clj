@@ -107,14 +107,14 @@
   Object
   (finalize [this]
     (when-not closed?
-      (log/info (str "Warning: leaked BDB cursor " cursor this))
+      (log/warn (str "leaked BDB cursor " cursor this))
       (.close cursor)))
 
   PCloser
   (justClosed [this] (set! closed? true)))
 
 (defn cursor-seq [^Database db deserialize observer & {:keys [keys-only]
-                                           :or {keys-only false}}]
+						       :or {keys-only false}}]
   (seque3 observer 64 
           #(let [cursor (.openCursor db nil (doto (CursorConfig.) (.setReadUncommitted true)))
                  dummy (Closer. cursor false)]             
@@ -123,7 +123,7 @@
                  (if-let [x (cursor-next cursor keys-only deserialize)]
                    (cons x (make-seq dummy))
                    (do (justClosed dummy) nil))))
-            dummy))))
+	      dummy))))
 
 (defn optimize-db
   "Walk over the database and rewrite each record, so that subsequent traversals
