@@ -287,6 +287,8 @@
 	    IMergeBucket
 	    (bucket-merge [this k v]
 			  (default-bucket-merge this merge k v))
+	    (bucket-batch-merge [this kvs]
+			  (default-bucket-batch-merge this merge kvs))
 	    
 	    IWriteBucket
 	    (bucket-put [this k v]

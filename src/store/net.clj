@@ -193,7 +193,7 @@
       store.core.IMergeBucket
       (bucket-merge [this k v]
 		    (exec {:op "merge" :as k :body v}))
-      (bucket-batch-merge [this kvs]
+      (bucket-batch-merge [this kvs] 
 		    (exec {:op "batch-merge" :body kvs}))
       
       store.core.IWriteBucket
