@@ -132,19 +132,30 @@
 (defmulti bucket #(do (assert (not (contains? % :flush)))
 		   (or (:type %) :mem)))
 
+(defn write-blocks! [writes b block-size]
+  (doseq [blocks (partition-all block-size writes)
+	  :when blocks
+	  [op vs] (group-by first blocks)]
+    (when op
+      (case op
+	    :put    (bucket-batch-put b (map second vs))
+	    :update (bucket-batch-merge b (map second vs))))))
+
+(defn drain-seq [b]
+  (->> (bucket-keys b)
+       (map (fn [k] (let [[v op] (bucket-delete b k)]
+		      [op [k v]])))))
+
+(defn checkpoint-seq [mem-bucket]
+  (->> (bucket-seq mem-bucket)
+       (map (fn [[k [v op]]] [op [k v]]))))
+
 (defn with-flush
   "Takes a bucket with a merge fn and wraps with an in-memory cache that can be flushed with bucket-sync.
    Read operations read from the underlying store, and will not reflect unflushed writes."
   ([b merge-fn & {:keys [block-size]
-		  :or {block-size 1000}}]
-     (let [mem-bucket (bucket {:type :mem})
-           do-flush! #(doseq [ks (partition-all block-size (bucket-keys mem-bucket))
-			      :when ks
-			      [op vs] (group-by last (map (fn [k] (cons k (bucket-delete mem-bucket k))) ks))]
-			(when op
-			  (case op
-				:put    (bucket-batch-put b (map drop-last vs))
-				:update (bucket-batch-merge b (map drop-last vs)))))]
+		  :or {block-size 100}}]
+     (let [mem-bucket (bucket {:type :mem})]
        (reify
 	IReadBucket
 	(bucket-get [this k] (bucket-get b k))
@@ -174,61 +185,58 @@
 		    (bucket-put mem-bucket k [v :put]))
 	(bucket-batch-put [this kvs] (default-bucket-batch-put this kvs))
 	(bucket-sync [this]
-		     (do-flush!)
+		     (write-blocks! (drain-seq mem-bucket) b block-size)
 		     (bucket-sync b))
 	(bucket-close [this]
-		      (do-flush!)
+		      (write-blocks! (drain-seq mem-bucket) b block-size)
 		      (bucket-close b))))))
 
 (defn with-cache
-  ([b merge-fn]
-     (let [mem-bucket (bucket {:type :mem})
-           do-flush! #(doseq [[k [v op]] (bucket-seq mem-bucket)]
-			(case op
-			      :put    (bucket-put b k v)
-			      :update (bucket-merge b k v)))]
-       (reify
-	IReadBucket
-	(bucket-get [this k]
-		    (or (let [[v op :as res] (bucket-get mem-bucket k)]
-			  (case (or op :nil)
-				:put v
-				:nil (or res nil)
-				:update (merge-fn k (bucket-get b k) v)))
-			(when-let [v (bucket-get b k)]
-			  (bucket-merge this k v)
-			  v)))
-	(bucket-exists? [this k] (or (bucket-exists? mem-bucket k) (bucket-exists? b k)))
-	(bucket-keys [this] (throw (UnsupportedOperationException.)))
-	(bucket-count [this] (throw (UnsupportedOperationException.)))
-	(bucket-batch-get [this ks] (default-bucket-batch-get this ks))
-	(bucket-seq [this] (throw (UnsupportedOperationException.)))
-	
-	IMergeBucket
-	(bucket-merge [this k v]
-		      (bucket-update this k #(merge-fn k % v)))
-	(bucket-batch-merge [this kvs]
-			    (bucket-batch-merge this kvs))
+  [b merge-fn  & {:keys [block-size]
+		  :or {block-size 100}}]
+  (let [mem-bucket (bucket {:type :mem})]
+    (reify
+     IReadBucket
+     (bucket-get [this k]
+		 (or (let [[v op :as res] (bucket-get mem-bucket k)]
+		       (case (or op :nil)
+			     :put v
+			     :nil (or res nil)
+			     :update (merge-fn k (bucket-get b k) v)))
+		     (when-let [v (bucket-get b k)]
+		       (bucket-merge this k v)
+		       v)))
+     (bucket-exists? [this k] (or (bucket-exists? mem-bucket k) (bucket-exists? b k)))
+     (bucket-keys [this] (throw (UnsupportedOperationException.)))
+     (bucket-count [this] (throw (UnsupportedOperationException.)))
+     (bucket-batch-get [this ks] (default-bucket-batch-get this ks))
+     (bucket-seq [this] (throw (UnsupportedOperationException.)))
+     
+     IMergeBucket
+     (bucket-merge [this k v]
+		   (bucket-update this k #(merge-fn k % v)))
+     (bucket-batch-merge [this kvs]
+			 (bucket-batch-merge this kvs))
 
-	IWriteBucket
-	(bucket-update [this k f]
-		       (bucket-update
-			mem-bucket k
-			(fn [old-tuple]
-			  (let [[val op] (or old-tuple [nil :update])]
-			    [(f val) op]))))
-	(bucket-delete [this k]
-		       (bucket-delete mem-bucket k)
-		       (bucket-delete b k))
-	(bucket-put [this k v]
-		    (bucket-put mem-bucket k [v :put]))
-	(bucket-batch-put [this kvs] (default-bucket-batch-put this kvs))
-	(bucket-sync [this]
-		     (do-flush!)
-		     (bucket-sync b))
-	(bucket-close [this]
-		      (do-flush!)
-		      (bucket-close b))))))
+     IWriteBucket
+     (bucket-update [this k f]
+		    (bucket-update
+		     mem-bucket k
+		     (fn [old-tuple]
+		       (let [[val op] (or old-tuple [nil :update])]
+			 [(f val) op]))))
+     (bucket-delete [this k]
+		    (bucket-delete mem-bucket k)
+		    (bucket-delete b k))
+     (bucket-put [this k v]
+		 (bucket-put mem-bucket k [v :put]))
+     (bucket-batch-put [this kvs] (default-bucket-batch-put this kvs))
+     (bucket-sync [this]
+		  (write-blocks! (checkpoint-seq mem-bucket) b block-size)
+		  (bucket-sync b))
+     (bucket-close [this]
+		   (write-blocks! (checkpoint-seq mem-bucket) b block-size)
+		   (bucket-close b)))))
 
 (defn wrapper-policy [b {:keys [merge cache?] :as args}]
   (cond
