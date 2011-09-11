@@ -158,7 +158,7 @@
 	(bucket-merge [this k v]
 		      (bucket-update this k #(merge-fn k % v)))
 	(bucket-batch-merge [this kvs]
-			    (default-bucket-batch-merge this kvs))
+			    (default-bucket-batch-merge this merge-fn kvs))
 
 	IWriteBucket
 	(bucket-update [this k f]
