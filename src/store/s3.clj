@@ -55,9 +55,7 @@
         s   (.getDataInputStream obj)]
     (when s (read (java.io.PushbackReader. (java.io.InputStreamReader. s))))))
 
-(defn s3-bucket
-  "Takes a S3 connection, a bucket name, and an optional map from logical
-  bucket name to actual S3 bucket name."
+(defmethod bucket :s3
   [{:keys [prefix merge name] :as args}]
   (let [s3 (s3-connection args)
 	bucket-name (str prefix name)]
