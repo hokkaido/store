@@ -6,7 +6,8 @@
    [ring.util.codec :as ring]
    [clojure.string :as str]
    [clj-json.core :as json]
-   [clj-time.coerce :as time.coerce])
+   [clj-time.coerce :as time.coerce]
+   [clojure.contrib.logging :as log])
   (:import [java.util.concurrent ConcurrentHashMap]
            [java.io File]))
 
@@ -21,6 +22,7 @@
 (defprotocol IWriteBucket
   (bucket-put [this k v]
               "write value for key. return value can be anything")
+  (bucket-batch-put [this kvs] "put a seq of [k v] pairs")
   (bucket-delete [this k] "remove key-value pair")
   (bucket-update [this k f])
   (bucket-sync [this])
@@ -40,6 +42,14 @@
 
 (defn default-bucket-batch-get [b ks]
   (for [k ks] [k (bucket-get b k)]))
+
+(defn default-bucket-batch-put [b kvs]
+  (doseq [[k v] kvs] (bucket-put b k v)))
+
+;;TODO: put on the protocol, implementations can be much more efficient deleting with cursor.
+(defn clear [b]
+  (doseq [k (bucket-keys b)]
+    (bucket-delete b k)))
 
 (defn default-bucket-update [b k f]
   (->>  k
@@ -76,6 +86,7 @@
 	   IWriteBucket
 	   (bucket-put [this k v]
 		       (.put h k v))
+	   (bucket-batch-put [this kvs] (default-bucket-batch-put this kvs))
 	   (bucket-delete [this k]
 			  (.remove h k))
 	   (bucket-update [this k f]
@@ -120,6 +131,8 @@
      (let [mem-bucket (bucket {:type :mem})
            do-flush! #(doseq [k (bucket-keys mem-bucket)]
 			(let [[v op] (bucket-delete mem-bucket k)]
+			  (when-not op
+			    (log/info (format "bogus flush, bad state %s in memory merge bucket." (pr-str [v op]))))
 			  (case op
 				:put    (bucket-put b k v)
 				:update (bucket-merge b k v))))]
@@ -148,7 +161,7 @@
 		       (bucket-delete b k))
 	(bucket-put [this k v]
 		    (bucket-put mem-bucket k [v :put]))
-
+	(bucket-batch-put [this kvs] (default-bucket-batch-put this kvs))
 	(bucket-sync [this]
 		     (do-flush!)
 		     (bucket-sync b))
@@ -196,7 +209,7 @@
 		       (bucket-delete b k))
 	(bucket-put [this k v]
 		    (bucket-put mem-bucket k [v :put]))
-
+	(bucket-batch-put [this kvs] (default-bucket-batch-put this kvs))
 	(bucket-sync [this]
 		     (do-flush!)
 		     (bucket-sync b))
@@ -244,6 +257,7 @@
 	       (bucket-put [this k v]
 			   (let [f (File. f ^String(ring/url-encode k))]
 			     (spit f (pr-str v))))
+	       (bucket-batch-put [this kvs] (default-bucket-batch-put this kvs))
 	       (bucket-delete [this k]
 			      (let [f (File. f ^String (ring/url-encode  k))]
 				(.delete f)))
@@ -284,6 +298,7 @@
 
 (def write-ops
      {:put bucket-put
+      :batch-put bucket-batch-put
       :delete bucket-delete
       :merge bucket-merge
       :update bucket-update

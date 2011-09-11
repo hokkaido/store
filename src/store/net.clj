@@ -127,7 +127,7 @@
     (take (Integer/parseInt (query-params "limit")) data)
     data))
 
-(defn exec-request
+(defn handle-request
   [s p & args]
   (let [o (p :op)
 	n (p :name)
@@ -146,25 +146,25 @@
 	(rest-response 500 nil {:error (str e)})))))
 
 (defn rest-store-handler [s]
-  (let [exec-req (partial with-ex (logger) exec-request s)]
+  (let [handle (partial with-ex (logger) handle-request s)]
     [ ;; seq, keys, sync, close
      (GET "/store/:op" {p :params}
-	  (exec-req p))
+	  (handle p))
      (GET "/store/:op/:name" {p :params}
-	  (exec-req p))
-     ;; batch-get
+	  (handle p))
+     ;; batch-get and batch-put
      (POST "/store/:op/:name" {p :params b :body}
-           (exec-req 
-	    p (parse-body b)))
+           (handle 
+	       p (parse-body b)))
      ;; get, modified, exists
      (GET "/store/:op/:name/:key"  {p :params}
-	  (exec-req p (url-decode (p :key))))
+	  (handle p (url-decode (p :key))))
      ;; put, merge
      (POST "/store/:op/:name/:key" {p :params b :body}
-           (exec-req 
-	    p
-	    (url-decode (p :key))
-	    (parse-body b)))]))
+           (handle 
+	       p
+	     (url-decode (p :key))
+	     (parse-body b)))]))
 
 (defn store-server [s & {:keys [port]
 			 :or {port 4445}}]

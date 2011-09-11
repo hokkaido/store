@@ -39,42 +39,42 @@
     (is (= {:body "null"
             :headers {"Content-Type" "application/json; charset=UTF-8"}
             :status 200}
-           (exec-request s {:name "hm" :op "put"} "k1" 42)))
+           (handle-request s {:name "hm" :op "put"} "k1" 42)))
     (is (= {:body "42"
             :headers {"Content-Type" "application/json; charset=UTF-8"}
             :status 200}
-           (exec-request s {:name "hm" :op "get"} "k1")))
+           (handle-request s {:name "hm" :op "get"} "k1")))
 
     (is (= {:body "callback(42)"
 	    :headers {"Content-Type" "text/javascript; charset=UTF-8"}
 	    :status 200}
-	   (exec-request s {:name "hm" :op "get" "callback" "callback"} "k1")))
+	   (handle-request s {:name "hm" :op "get" "callback" "callback"} "k1")))
 
 
     (is (= {:body "callback([[\"k1\",42]])"
 	    :headers {"Content-Type" "text/javascript; charset=UTF-8"}
 	    :status 200}
-	   (exec-request s {:name "hm" :op "seq" "callback" "callback"})))
+	   (handle-request s {:name "hm" :op "seq" "callback" "callback"})))
 
     
-    (exec-request s {:name "hm" :op "put"} "k2" 42)
+    (handle-request s {:name "hm" :op "put"} "k2" 42)
     (is (= #{"k1" "k2"}
-	   (into #{} (map json/parse-string (:body (exec-request s {:name "hm" :op "keys"}))))))
+	   (into #{} (map json/parse-string (:body (handle-request s {:name "hm" :op "keys"}))))))
 
     ;; NPE since hashmaps don't support nil vals
     (is (= {:body "null"
             :headers {"Content-Type" "application/json; charset=UTF-8"}
             :status 200}
-           (exec-request s {:name "fs" :op "put"} "null-k" nil)))
+           (handle-request s {:name "fs" :op "put"} "null-k" nil)))
     (is (= {:body "null"
             :headers {"Content-Type" "application/json; charset=UTF-8"}
             :status 200}
-           (exec-request s {:name "fs" :op "get"} "null-k")))
+           (handle-request s {:name "fs" :op "get"} "null-k")))
 
     ;; Merge
-    (exec-request s {:name "hm" :op "merge"} "k1" 42)
+    (handle-request s {:name "hm" :op "merge"} "k1" 42)
     (is (= "84"
-	   (:body (exec-request s {:name "hm" :op "get"}  "k1"))))))
+	   (:body (handle-request s {:name "hm" :op "get"}  "k1"))))))
 
 (deftest rest-bucket-test
   (let [b (bucket {:type :rest
@@ -94,6 +94,15 @@
            (-> b (bucket-get "k2") :a)))
 
     (is (= #{"k1" "k2"} (into #{} (bucket-keys b))))
+
+    (let [batch {"k3" 3
+		 "k4" 4
+		 "k5" 5}]
+
+      (bucket-batch-put b batch)
+      (is (= batch (bucket-batch-get b [ "k3"
+					 "k4"
+					 "k5"]))))
     
     (bucket-delete b "k1")
     (is (not (bucket-exists? b "k1")))

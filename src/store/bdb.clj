@@ -293,6 +293,8 @@
 			(let [entry-key (DatabaseEntry. (serialize k))
 			      entry-val (DatabaseEntry. (serialize v))]
 			  (.put db nil entry-key entry-val)))
+	    (bucket-batch-put [this kvs]
+			      (default-bucket-batch-put this kvs))
 	    (bucket-delete [this k]
 			   (.delete db nil (DatabaseEntry. (serialize k))))
 	    (bucket-update [this k f]
