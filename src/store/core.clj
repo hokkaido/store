@@ -29,7 +29,8 @@
   (bucket-close [this]))
 
 (defprotocol IMergeBucket
-  (bucket-merge [this k v] "merge v into current value"))
+  (bucket-merge [this k v] "merge v into current value")
+  (bucket-batch-merge [this kvs] "merge key valye pairs kvs into current values"))
 
 (defprotocol IOptimizeBucket
   (bucket-optimize [this] "optimize for in order reads from disk on :keys and :seq requests"))
@@ -40,11 +41,11 @@
    (partial = k)
    (bucket-keys b)))
 
-(defn default-bucket-batch-get [b ks]
-  (for [k ks] [k (bucket-get b k)]))
-
 (defn default-bucket-batch-put [b kvs]
   (doseq [[k v] kvs] (bucket-put b k v)))
+
+(defn default-bucket-batch-get [b ks]
+  (for [k ks] [k (bucket-get b k)]))
 
 ;;TODO: put on the protocol, implementations can be much more efficient deleting with cursor.
 (defn clear [b]
@@ -65,6 +66,11 @@
   (assert merge-fn)
   (bucket-update b k (fn [v-to] (merge-fn k v-to v))))
 
+(defn default-bucket-batch-merge [b merge-fn kvs]
+  (assert merge-fn)
+  (doseq [[k v] kvs]
+    (bucket-update b k (fn [v-to] (merge-fn k v-to v)))))
+
 (defn hashmap-bucket [^ConcurrentHashMap h & [merge-fn]]
   (reify IReadBucket
 	   (bucket-keys [this]
@@ -82,6 +88,8 @@
 	   IMergeBucket
 	   (bucket-merge [this k v]
 			 (default-bucket-merge this merge-fn k v))
+	   (bucket-batch-merge [this kvs]
+			 (default-bucket-batch-merge this merge-fn kvs))
 
 	   IWriteBucket
 	   (bucket-put [this k v]
@@ -127,15 +135,16 @@
 (defn with-flush
   "Takes a bucket with a merge fn and wraps with an in-memory cache that can be flushed with bucket-sync.
    Read operations read from the underlying store, and will not reflect unflushed writes."
-  ([b merge-fn]
+  ([b merge-fn & {:keys [block-size]
+		  :or {block-size 1000}}]
      (let [mem-bucket (bucket {:type :mem})
-           do-flush! #(doseq [k (bucket-keys mem-bucket)]
-			(let [[v op] (bucket-delete mem-bucket k)]
-			  (when-not op
-			    (log/info (format "bogus flush, bad state %s in memory merge bucket." (pr-str [v op]))))
+           do-flush! #(doseq [ks (partition-all block-size (bucket-keys mem-bucket))
+			      :when ks
+			      [op vs] (group-by last (map (fn [k] (cons k (bucket-delete mem-bucket k))) ks))]
+			(when op
 			  (case op
-				:put    (bucket-put b k v)
-				:update (bucket-merge b k v))))]
+				:put    (bucket-batch-put b (map drop-last vs))
+				:update (bucket-batch-merge b (map drop-last vs)))))]
        (reify
 	IReadBucket
 	(bucket-get [this k] (bucket-get b k))
@@ -148,6 +157,8 @@
 	IMergeBucket
 	(bucket-merge [this k v]
 		      (bucket-update this k #(merge-fn k % v)))
+	(bucket-batch-merge [this kvs]
+			    (default-bucket-batch-merge this kvs))
 
 	IWriteBucket
 	(bucket-update [this k f]
@@ -196,6 +207,8 @@
 	IMergeBucket
 	(bucket-merge [this k v]
 		      (bucket-update this k #(merge-fn k % v)))
+	(bucket-batch-merge [this kvs]
+			    (bucket-batch-merge this kvs))
 
 	IWriteBucket
 	(bucket-update [this k f]
@@ -251,6 +264,8 @@
 	       IMergeBucket
 	       (bucket-merge [this k v]
 			     (default-bucket-merge this merge k v))
+	       (bucket-batch-merge [this kvs]
+			     (default-bucket-batch-merge this merge kvs))
 
 	       
 	       IWriteBucket
@@ -280,7 +295,6 @@
       :bucket-exists? (fn [this k] (find this k))
       :bucket-count (fn [this] (count this))})
 
-
 (doseq [c [clojure.lang.PersistentHashMap
 	   clojure.lang.PersistentArrayMap
 	   clojure.lang.PersistentStructMap]]
@@ -301,6 +315,7 @@
       :batch-put bucket-batch-put
       :delete bucket-delete
       :merge bucket-merge
+      :batch-merge bucket-batch-merge
       :update bucket-update
       :sync bucket-sync
       :close bucket-close

@@ -100,11 +100,11 @@
 		 "k5" 5}]
 
       (bucket-batch-put b batch)
-      (is (= batch (bucket-batch-get b [ "k3"
-					 "k4"
-					 "k5"]))))
+      (is (= batch (into {}  (bucket-batch-get b [ "k3"
+						   "k4"
+						   "k5"])))))
     
-    (bucket-delete b "k1")
+    (clear b)
     (is (not (bucket-exists? b "k1")))
 
     

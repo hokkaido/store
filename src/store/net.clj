@@ -152,7 +152,7 @@
 	  (handle p))
      (GET "/store/:op/:name" {p :params}
 	  (handle p))
-     ;; batch-get and batch-put
+     ;; batch-get, batch-put, batch-merge
      (POST "/store/:op/:name" {p :params b :body}
            (handle 
 	       p (parse-body b)))
@@ -193,9 +193,12 @@
       store.core.IMergeBucket
       (bucket-merge [this k v]
 		    (exec {:op "merge" :as k :body v}))
+      (bucket-batch-merge [this kvs]
+		    (exec {:op "batch-merge" :body kvs}))
       
       store.core.IWriteBucket
       (bucket-put [this k v] (exec {:op "put" :as k :body v}))
+      (bucket-batch-put [this kvs] (exec {:op "batch-put" :body kvs}))
       (bucket-delete [this k] (exec {:op "delete" :as k}))
       (bucket-update [this k f]
 		     (throw (Exception. (format "can not call update on rest bucket %s with key: %s and update fn: %s" this k f))))
