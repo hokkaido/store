@@ -19,7 +19,15 @@
   (is (= [["k2",2]] (bucket-seq b)))
   (is (nil? (bucket-get b "dne")))
   (bucket-update b "k2" inc)
-  (is (= (bucket-get b "k2") 3)))
+  (is (= (bucket-get b "k2") 3))
+  (let [batch {"k3" 3
+	       "k4" 4
+	       "k5" 5}]
+    (bucket-batch-put b batch)
+    (is (= batch (into {} (bucket-batch-get b [ "k3"
+						"k4"
+						"k5"])))))
+  (clear b))
 
 (defn generic-store-test [store]
   (let [s (store ["b1","b2","b3"])

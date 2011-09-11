@@ -10,10 +10,6 @@
   (:import [java.util.concurrent Executors TimeUnit
 	    ConcurrentHashMap]))
 
-
-
-
-
 (defn create-buckets [{:keys [read write] :as spec}]
   (let [r (bucket (if read (merge spec read) spec))
 	w (if write
