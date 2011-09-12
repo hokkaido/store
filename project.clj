@@ -6,7 +6,6 @@
                  [net.java.dev.jets3t/jets3t "0.7.4"]
                  [clj-sys/plumbing "0.1.5-SNAPSHOT"]
 		 [fetcher "0.0.5-SNAPSHOT"]
-                 [ring/ring-core "0.3.1"]
                  [com.sleepycat/je "4.1.7"]
                  [commons-io "2.0.1"]
                  [compojure "0.6.1"]
@@ -14,6 +13,5 @@
                  [ring/ring-core "0.3.7"]
                  [ring/ring-jetty-adapter "0.3.7"]
                  [clj-time "0.4.0-SNAPSHOT"]]
-  :dev-dependencies [[swank-clojure "1.3.2"]]
   :jvm-opts ["-Xmx600m"]
   :repositories {"oracle" "http://download.oracle.com/maven/"})
