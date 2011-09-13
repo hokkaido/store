@@ -78,7 +78,7 @@
         NIL (Object.)   ;nil sentinel since LBQ doesn't support nils
         done? (atom false)]
     (obs/watch-fn!
-      observer :queue-size
+      observer :queue-size :log
       (fn [^LinkedBlockingQueue q done?]
         (if @done? obs/*stop-watching* {:count 1 :size (.size q)}))
       q done?)
