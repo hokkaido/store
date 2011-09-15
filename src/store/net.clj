@@ -1,6 +1,5 @@
 (ns store.net
-  (:use store.core
-        [clojure.java.io :only [file copy]]
+  (:use [clojure.java.io :only [file copy]]
         [clojure.contrib.shell :only [sh]]
         [plumbing.core :only [keywordize-map ?>]]
 	[plumbing.error :only [with-ex logger]]
@@ -10,7 +9,8 @@
 	[ring.adapter.jetty :only [run-jetty]]
 	[services.core :only [start-web]]
         [ring.util.codec :only [url-decode url-encode]])
-  (:require [clojure.string :as str]
+  (:require [store.core :as bucket]
+	    [clojure.string :as str]
             [clj-json.core :as json]
 	    [clojure.contrib.logging :as log]
             [fetcher.core :as client])
@@ -103,9 +103,9 @@
 
 (defn rest-response-body [op data]
   (let [op (keyword op)]
-    (cond (streaming-ops op)
+    (cond (bucket/streaming-ops op)
 	  (map json/generate-string data)
-	  (or (write-ops op)
+	  (or (bucket/write-ops op)
 	      (rest-bucket-ops op))
 	  (to-json data)
 	  :else
@@ -172,36 +172,36 @@
       rest-store-handler
       (start-web {:port port :join? false})))
 		  
-(defmethod bucket :rest [{:keys [batch-size merge] :or {batch-size 10000} :as args}]
+(defmethod bucket/bucket :rest [{:keys [batch-size merge] :or {batch-size 10000} :as args}]
   (let [exec (mpartial rest-call args)]
     (->
      (reify
       store.core.IReadBucket
-      (bucket-get [this k] (exec {:op "get" :as k}))
-      (bucket-seq [this] (exec {:op "seq"}))
-      (bucket-exists? [this k] (exec {:op "exists?" :as k}))
-      (bucket-keys [this] (exec {:op "keys"}))
-      (bucket-count [this] (throw (UnsupportedOperationException.)))      
-      (bucket-batch-get [this ks]
+      (bucket/get [this k] (exec {:op "get" :as k}))
+      (bucket/seq [this] (exec {:op "seq"}))
+      (bucket/exists? [this k] (exec {:op "exists?" :as k}))
+      (bucket/keys [this] (exec {:op "keys"}))
+      (bucket/count [this] (throw (UnsupportedOperationException.)))      
+      (bucket/batch-get [this ks]
 			(->> ks
 			     (partition-all batch-size)
 			     (mapcat (fn [p] (exec {:op "batch-get" :body p})))))
 
       store.core.IOptimizeBucket
-      (bucket-optimize [this] (exec {:op "optimize"}))
+      (bucket/optimize [this] (exec {:op "optimize"}))
 
       store.core.IMergeBucket
-      (bucket-merge [this k v]
+      (bucket/merge [this k v]
 		    (exec {:op "merge" :as k :body v}))
-      (bucket-batch-merge [this kvs] 
+      (bucket/batch-merge [this kvs] 
 		    (exec {:op "batch-merge" :body kvs}))
       
       store.core.IWriteBucket
-      (bucket-put [this k v] (exec {:op "put" :as k :body v}))
-      (bucket-batch-put [this kvs] (exec {:op "batch-put" :body kvs}))
-      (bucket-delete [this k] (exec {:op "delete" :as k}))
-      (bucket-update [this k f]
+      (bucket/put [this k v] (exec {:op "put" :as k :body v}))
+      (bucket/batch-put [this kvs] (exec {:op "batch-put" :body kvs}))
+      (bucket/delete [this k] (exec {:op "delete" :as k}))
+      (bucket/update [this k f]
 		     (throw (Exception. (format "can not call update on rest bucket %s with key: %s and update fn: %s" this k f))))
-      (bucket-close [this])
-      (bucket-sync [this] (exec {:op "sync"})))
-     (wrapper-policy args))))
+      (bucket/close [this])
+      (bucket/sync [this] (exec {:op "sync"})))
+     (bucket/wrapper-policy args))))

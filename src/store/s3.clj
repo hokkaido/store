@@ -1,7 +1,7 @@
 (ns store.s3
-  (:use store.core
-	[plumbing.core :only [?>]])
-  (:require [clojure.contrib.duck-streams :as ds])
+  (:use [plumbing.core :only [?>]])
+  (:require [clojure.contrib.duck-streams :as ds]
+	    [store.core :as bucket])
   (:import
    java.io.File
    [java.io DataOutputStream ByteArrayOutputStream ObjectOutputStream
@@ -55,38 +55,38 @@
         s   (.getDataInputStream obj)]
     (when s (read (java.io.PushbackReader. (java.io.InputStreamReader. s))))))
 
-(defmethod bucket :s3
+(defmethod bucket/bucket :s3
   [{:keys [prefix merge name] :as args}]
   (let [s3 (s3-connection args)
 	bucket-name (str prefix name)]
     (create-bucket s3 bucket-name)
     (->
-     (reify store.core.IReadBucket
-	    (bucket-keys [this]
+     (reify bucket/IReadBucket
+	    (bucket/keys [this]
 			 (get-keys s3 bucket-name))
-	    (bucket-get [this k]
+	    (bucket/get [this k]
 			(get-clj s3 bucket-name (str k)))
-	    (bucket-exists? [this k]
+	    (bucket/exists? [this k]
 			    (some #(= k (.getKey %))
 				  (-> s3 (objects bucket-name (str k)) seq)))
-	    (bucket-seq [this] (default-bucket-seq this))	 
-	    (bucket-batch-get [this ks] (throw (UnsupportedOperationException.)))
-	    (bucket-count [this] (throw (UnsupportedOperationException.)))
+	    (bucket/seq [this] (bucket/default-seq this))	 
+	    (bucket/batch-get [this ks] (throw (UnsupportedOperationException.)))
+	    (bucket/count [this] (throw (UnsupportedOperationException.)))
 
-	    IMergeBucket
-	    (bucket-merge [this k v]
-			  (default-bucket-merge this merge k v))
+	    bucket/IMergeBucket
+	    (bucket/merge [this k v]
+			  (bucket/default-merge this merge k v))
 
 	    
-	    store.core.IWriteBucket
-	    (bucket-put [this k v]
+	    bucket/IWriteBucket
+	    (bucket/put [this k v]
 			(put-clj s3 bucket-name (str k) v))
     
-	    (bucket-delete [this k]
+	    (bucket/delete [this k]
 			   (delete-object s3 bucket-name (str k)))
     
-	    (bucket-update [this k f]
-			   (default-bucket-update this k f))
-	    (bucket-close [this] (throw (UnsupportedOperationException.)))
-	    (bucket-sync [this] (throw (UnsupportedOperationException.))))
-     (wrapper-policy args))))
+	    (bucket/update [this k f]
+			   (bucket/default-update this k f))
+	    (bucket/close [this] (throw (UnsupportedOperationException.)))
+	    (bucket/sync [this] (throw (UnsupportedOperationException.))))
+     (bucket/wrapper-policy args))))

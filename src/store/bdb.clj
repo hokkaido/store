@@ -1,11 +1,11 @@
 (ns store.bdb
-  (:use store.core
-        [clojure.java.io :only [file copy make-parents]]
+  (:use [clojure.java.io :only [file copy make-parents]]
         [clojure.contrib.shell :only [sh]]
 	[plumbing.core :only [?>]]
 	[plumbing.error :only [assert-keys]])
   (:require [clj-json.core :as json]
 	    [clojure.contrib.logging :as log]
+	    [store.core :as bucket]
             [plumbing.observer :as obs])
   (:import (com.sleepycat.je Database 
                              DatabaseEntry
@@ -233,7 +233,7 @@
       (.endBackup backup)
       ret)))
 
-(defmethod bucket :bdb
+(defmethod bucket/bucket :bdb
   [{:keys [^String name path cache read-only-env cache-mode
 	   read-only deferred-write merge
            observer serialize deserialize]
@@ -255,57 +255,57 @@
 		       (dissoc args :read-only)))
 	db (.openDatabase env nil name db-conf)]
     (->
-     (reify IReadBucket
-	    (bucket-get [this k]
+     (reify bucket/IReadBucket
+	    (bucket/get [this k]
 			(let [entry-key (DatabaseEntry. (serialize k))
 			      entry-val (DatabaseEntry.)]
 			  (when (= (.get db nil entry-key entry-val LockMode/DEFAULT)
 				   OperationStatus/SUCCESS)
 			    (deserialize (.getData entry-val)))))
-	    (bucket-batch-get [this ks]
-			      (default-bucket-batch-get this ks))
+	    (bucket/batch-get [this ks]
+			      (bucket/default-batch-get this ks))
 	    ;;This method does an optimized, internal traversal, does not impact the working set in the cache, but may not be accurate in the face of concurrent modifications in the database
 	    ;;see:  http://www.oracle.com/technetwork/database/berkeleydb/je-faq-096044.html#31
-	    (bucket-count [this]
+	    (bucket/count [this]
 			  (.count db))
-	    (bucket-keys [this]
+	    (bucket/keys [this]
               (cursor-seq db deserialize observer 
                           :keys-only true))
-	    (bucket-seq [this]
+	    (bucket/seq [this]
               (cursor-seq db deserialize observer))
 
-	    (bucket-exists? [this k]
+	    (bucket/exists? [this k]
 			    (let [entry-key (DatabaseEntry. (serialize k))
 				  entry-val (DatabaseEntry.)]
 			      (.setPartial entry-val (int 0) (int 0) true)
 			      (= (.get db nil entry-key entry-val LockMode/DEFAULT)
 				 OperationStatus/SUCCESS)))
 
-	    IOptimizeBucket
-	    (bucket-optimize [this] (optimize-db db))
+	    bucket/IOptimizeBucket
+	    (bucket/optimize [this] (optimize-db db))
 	    
-	    IMergeBucket
-	    (bucket-merge [this k v]
-			  (default-bucket-merge this merge k v))
-	    (bucket-batch-merge [this kvs]
-			  (default-bucket-batch-merge this merge kvs))
+	    bucket/IMergeBucket
+	    (bucket/merge [this k v]
+			  (bucket/default-merge this merge k v))
+	    (bucket/batch-merge [this kvs]
+			  (bucket/default-batch-merge this merge kvs))
 	    
-	    IWriteBucket
-	    (bucket-put [this k v]
+	    bucket/IWriteBucket
+	    (bucket/put [this k v]
 			(let [entry-key (DatabaseEntry. (serialize k))
 			      entry-val (DatabaseEntry. (serialize v))]
 			  (.put db nil entry-key entry-val)))
-	    (bucket-batch-put [this kvs]
-			      (default-bucket-batch-put this kvs))
-	    (bucket-delete [this k]
+	    (bucket/batch-put [this kvs]
+			      (bucket/default-batch-put this kvs))
+	    (bucket/delete [this k]
 			   (.delete db nil (DatabaseEntry. (serialize k))))
-	    (bucket-update [this k f]
-			   (default-bucket-update this k f))
-	    (bucket-sync [this]
+	    (bucket/update [this k f]
+			   (bucket/default-update this k f))
+	    (bucket/sync [this]
 			 (when (-> db .getConfig .getDeferredWrite)
 			   (.sync db)))
-	    (bucket-close [this]
+	    (bucket/close [this]
 			  (do 
 			    (.close db)
 			    (.close env))))
-     (wrapper-policy args))))
+     (bucket/wrapper-policy args))))

@@ -1,19 +1,19 @@
 (ns store.net-test
   (:use clojure.test
-        store.api
-	store.core
         store.net
         [store.core-test :only [generic-bucket-test]]
         [plumbing.core :only [find-first]]
         [plumbing.error :only [with-ex logger]]
 	[ring.adapter.jetty :only [run-jetty]]
 	[compojure.core :only [routes]])
-  (:require [store.api :as store] [clj-json.core :as json]))
+  (:require [store.api :as store]
+	    [store.core :as bucket]
+	    [clj-json.core :as json]))
 
 (use-fixtures :each
               (fn [f]
                 (let [server (store-server
-			      (store ["b1" "b2"]
+			      (store/store ["b1" "b2"]
 				     {:merge (fn [_ x y]
 					       (+ (or x 0) y))}))]
                   (f)
@@ -31,7 +31,7 @@
 	   (get "content-type")))))
 
 (deftest exec-req-test
-  (let [s (store [{:name "hm"
+  (let [s (store/store [{:name "hm"
 		   :merge (fn [_ x y] (+ (or x 0) y))}
 		  {:name "fs"
 		   :type :fs
@@ -77,68 +77,68 @@
 	   (:body (handle-request s {:name "hm" :op "get"}  "k1"))))))
 
 (deftest rest-bucket-test
-  (let [b (bucket {:type :rest
+  (let [b (bucket/bucket {:type :rest
 		   :name "b1"
 		   :host "localhost"
 		   :batch-size 2
 		   :port 4445})]
-    (bucket-put b "k1" "v1")
-    (is (= (bucket-get b "k1") "v1"))
-    (is (find-first (partial = "k1") (bucket-keys b)))
-    (is (bucket-exists? b "k1"))
+    (bucket/put b "k1" "v1")
+    (is (= (bucket/get b "k1") "v1"))
+    (is (find-first (partial = "k1") (bucket/keys b)))
+    (is (bucket/exists? b "k1"))
 
-    (is (= [["k1" "v1"]] (bucket-seq b)))
+    (is (= [["k1" "v1"]] (bucket/seq b)))
     
-    (bucket-put b "k2" {:a 1})
+    (bucket/put b "k2" {:a 1})
     (is (= 1
-           (-> b (bucket-get "k2") :a)))
+           (-> b (bucket/get "k2") :a)))
 
-    (is (= #{"k1" "k2"} (into #{} (bucket-keys b))))
+    (is (= #{"k1" "k2"} (into #{} (bucket/keys b))))
 
     (let [batch {"k3" 3
 		 "k4" 4
 		 "k5" 5}]
 
-      (bucket-batch-put b batch)
-      (is (= batch (into {}  (bucket-batch-get b [ "k3"
+      (bucket/batch-put b batch)
+      (is (= batch (into {}  (bucket/batch-get b [ "k3"
 						   "k4"
 						   "k5"])))))
     
-    (clear b)
-    (is (not (bucket-exists? b "k1")))
+    (bucket/clear b)
+    (is (not (bucket/exists? b "k1")))
 
     
-    (bucket-put b "k2" 2)
-    (is (= 2 (bucket-get b "k2")))
-    (is (= [["k2",2]] (bucket-seq b)))
-    (is (nil? (bucket-get b "dne")))
+    (bucket/put b "k2" 2)
+    (is (= 2 (bucket/get b "k2")))
+    (is (= [["k2",2]] (bucket/seq b)))
+    (is (nil? (bucket/get b "dne")))
 
-    (bucket-merge b "k2" 1)
-    (is (= (bucket-get b "k2") 3))
+    (bucket/merge b "k2" 1)
+    (is (= (bucket/get b "k2") 3))
 
-    (bucket-put b "k3" {:a 1})
-    (is (= {:a 1} (bucket-get b "k3")))
+    (bucket/put b "k3" {:a 1})
+    (is (= {:a 1} (bucket/get b "k3")))
 
-    (bucket-put b "k1" "v1")
-    (bucket-put b "k2" "v2")
-    (bucket-put b "k3" "v3")
-    (bucket-put b "k4" "v4")
+    (bucket/put b "k1" "v1")
+    (bucket/put b "k2" "v2")
+    (bucket/put b "k3" "v3")
+    (bucket/put b "k4" "v4")
     (is (=
 	 (seq {"k1" "v1"
 	   "k2" "v2"
 	   "k3" "v3"
 	   "k4" "v4"})
-	 (sort-by first (bucket-batch-get b ["k1" "k2" "k3" "k4"]))))))
+	 (sort-by first (bucket/batch-get b ["k1" "k2" "k3" "k4"]))))))
 
 (deftest rest-store-test
-  (let [s (store [] rest-spec)]
+  (let [s (store/store [] rest-spec)]
     (s :add "b3")
     (s :put "b3" "k1" 1)
     (is (= 1 (s :get "b3" "k1")))
     (is (s :bucket "b3"))
     (s :remove "b1")
     (s :remove "b2")
-    (let [other (store [] rest-spec)]
+    (let [other (store/store [] rest-spec)]
       (is (= ["b3"] (other :buckets)))
 
       (s :remove "b3")
@@ -146,15 +146,15 @@
       (is (empty? (other :buckets))))))
 
 (deftest mirror-remote-store-test
-  (let [s1 (mirror-remote rest-spec)
-	s2 (mirror-remote rest-spec)]
+  (let [s1 (store/mirror-remote rest-spec)
+	s2 (store/mirror-remote rest-spec)]
     (is (= ["b1" "b2"] (sort  (s1 :buckets))))
       (s2 :remove "b2")
       (is (not (s1 :bucket "b2")))
       (is (= ["b1"] (s1 :buckets)))))
 
 (deftest rest-client-keywords-test
-  (let [b (bucket {:type :rest
+  (let [b (bucket/bucket {:type :rest
 		   :name "b1"
 		   :host "localhost"
 		   :batch-size 2
@@ -166,18 +166,18 @@
     (doseq [x tasks]
       (.submit pool
 	       (cast Runnable
-		     #(do (bucket-put b
+		     #(do (bucket/put b
 				      (str "http://www.google.com" x)
 				      body)
 			  (.countDown latch)))))
     (.await latch)
     (.shutdown pool)
-    (let [ks (keys (bucket-get b "http://www.google.com0"))]
+    (let [ks (keys (bucket/get b "http://www.google.com0"))]
       (is (empty? (remove keyword? ks))))
-    (is (= 10 (count (bucket-keys b))))))
+    (is (= 10 (count (bucket/keys b))))))
 
 (deftest rest-client-strings-test
-  (let [b (bucket {:type :rest
+  (let [b (bucket/bucket {:type :rest
 		   :name "b1"
 		   :host "localhost"
 		   :batch-size 2
@@ -190,12 +190,12 @@
     (doseq [x tasks]
       (.submit pool
 	       (cast Runnable
-		     #(do (bucket-put b
+		     #(do (bucket/put b
 				      (str "http://www.google.com" x)
 				      body)
 			  (.countDown latch)))))
     (.await latch)
     (.shutdown pool)
-    (let [ks (keys (bucket-get b "http://www.google.com0"))]
+    (let [ks (keys (bucket/get b "http://www.google.com0"))]
       (is (empty? (remove string? ks))))
-    (is (= 10 (count (bucket-keys b))))))
+    (is (= 10 (count (bucket/keys b))))))
