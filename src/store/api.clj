@@ -65,22 +65,25 @@
   (let [{:keys [type]} (.context store)
         name (first args)
 	args (rest args)]
-    (if (find bucket-ops op)
-      (let [local ((op bucket-ops) store name)]
-	(if-not (= type :rest) local
-		((op rest-bucket-ops) store name)))
-      (let [read (read-ops op)
-	    spec (->> name (bucket-get (.bucket-map store)))
-	    b (if read (:read spec)
-		  (:write spec))
-	    f (or read (write-ops op))]
-	(when-not b
-	  (when-not spec
-	    (throw (Exception. (format "No bucket %s" name))))
-	  (let [read-or-write (if read "read" "write")]
-	    (throw (Exception. (format "No %s operation for bucket %s" read-or-write name)))))
-	(apply f b args)))))
-
+    (cond
+     ;;should just send fn.  over rest, it gets quoted and then evaled on server.
+     (= op :eval) ((eval name) store)
+     (find bucket-ops op)
+     (let [local ((op bucket-ops) store name)]
+       (if-not (= type :rest) local
+               ((op rest-bucket-ops) store name)))
+     :else
+     (let [read (read-ops op)
+	   spec (->> name (bucket-get (.bucket-map store)))
+	   b (if read (:read spec)
+		 (:write spec))
+	   f (or read (write-ops op))]
+       (when-not b
+	 (when-not spec
+	   (throw (Exception. (format "No bucket %s" name))))
+	 (let [read-or-write (if read "read" "write")]
+	   (throw (Exception. (format "No %s operation for bucket %s" read-or-write name)))))
+       (apply f b args)))))
 
 ;;TODO: fucked, create a coherent model for store flush and shutdown
 (defn flush! [^Store store]
@@ -116,7 +119,6 @@
 			       (fn []
 				 (bucket-sync write)
 				 (.shutdownNow pool)))))))))
-   
        doall
        ^java.util.Map (into {})
        (ConcurrentHashMap.)
@@ -140,11 +142,15 @@
     (-> (buckets bucket-specs context)
 	start-flush-pools
 	(Store.
-         (obs/observed-fn
-          (:observer context) :counts
-          {:type :counts :group (fn [[_ op b]] [b op])}
-          store-op)
-         context))))
+	 (obs/observed-fn
+	    (:observer context) :counts
+	    {:type :counts :group (obs/observed-fn
+				   (:observer context) :counts
+				   {:type :counts :group (fn [[_ op b]] [b op])}
+				   store-op)}
+	    store-op)
+
+	 context))))
 
 (defn clone [^store.api.Store s & [context]]
   (store (bucket-keys (.bucket-map s)) context))

@@ -99,4 +99,10 @@
     (sync-stores a b "a" :select :hang :threads 10)
     (is (= 5 (count (a :keys "a"))))
     (is (= [1 2 4 5 100]
-	   (sort (map second (b :seq "a")))))))
+	     (sort (map second (b :seq "a")))))))
+
+(deftest eval-test
+  (let [s (store ["a"])]
+    (s :eval
+       '(fn [x] (x :put "a" "b" "c")))
+    (is (= "c" (s :get "a" "b")))))

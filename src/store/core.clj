@@ -255,8 +255,8 @@
 			   (let [f (File. f ^String (ring/url-encode k))]
 			     (when (.exists f) (-> f slurp read-string))))
 	       (bucket-batch-get [this ks] (default-bucket-batch-get this ks))
-	       (bucket-seq [this] (default-bucket-seq this))     
-	       (bucket-exists? [this k]		
+	       (bucket-seq [this] (default-bucket-seq this))
+	       (bucket-exists? [this k]
 			       (let [f (File. f ^String (ring/url-encode k))]
 				 (.exists f)))
 	       (bucket-keys [this]
