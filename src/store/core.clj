@@ -198,11 +198,8 @@
     (reify
      IReadBucket
      (bucket-get [this k]
-		 (or (let [[v op :as res] (bucket-get mem-bucket k)]
-		       (case (or op :nil)
-			     :put v
-			     :nil (or res nil)
-			     :update (merge-fn k (bucket-get b k) v)))
+		 (or (when-let [[v op] (bucket-get mem-bucket k)]
+		       v)
 		     (when-let [v (bucket-get b k)]
 		       (bucket-merge this k v)
 		       v)))
@@ -223,7 +220,7 @@
 		    (bucket-update
 		     mem-bucket k
 		     (fn [old-tuple]
-		       (let [[val op] (or old-tuple [nil :update])]
+		       (let [[val op] (or old-tuple [(bucket-get b k) :put])]
 			 [(f val) op]))))
      (bucket-delete [this k]
 		    (bucket-delete mem-bucket k)
