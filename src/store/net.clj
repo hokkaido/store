@@ -10,7 +10,7 @@
 	[services.core :only [start-web]]
         [ring.util.codec :only [url-decode url-encode]])
   (:require [plumbing.observer :as obs]
-	    [store.core :as bucket]
+	    [store.core   :as bucket]
 	    [store.api :as store]
 	    [clojure.string :as str]
             [clj-json.core :as json]
@@ -160,9 +160,6 @@
 	    data (if (#{"seq" "keys"} o)
 		   (seq-post-process p data)
 		   data)]
-
-	(when (= o "add") (println (format "tried to add %s" data)))
-	
 	(if callback
 	  (jsonp-response callback data)
 	  (rest-response 200 o data)))
