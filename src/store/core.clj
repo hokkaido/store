@@ -200,14 +200,11 @@
     (reify
      IReadBucket
      (get [this k]
-		 (or (let [[v op :as res] (get mem-bucket k)]
-		       (case (or op :nil)
-			     :put v
-			     :nil (or res nil)
-			     :update (merge-fn k (get b k) v)))
-		     (when-let [v (get b k)]
-		       (merge this k v)
-		       v)))
+	  (or (when-let [[v op] (bucket/get mem-bucket k)]
+		v)
+	      (when-let [v (bucket/get b k)]
+		(bucket-merge this k v)
+		v)))
      (exists? [this k] (or (exists? mem-bucket k) (exists? b k)))
      (keys [this] (throw (UnsupportedOperationException.)))
      (count [this] (throw (UnsupportedOperationException.)))
@@ -216,29 +213,29 @@
      
      IMergeBucket
      (merge [this k v]
-		   (update this k #(merge-fn k % v)))
+	    (update this k #(merge-fn k % v)))
      (batch-merge [this kvs]
-			 (batch-merge this kvs))
+		  (batch-merge this kvs))
 
      IWriteBucket
      (update [this k f]
-		    (update
-		     mem-bucket k
-		     (fn [old-tuple]
-		       (let [[val op] (or old-tuple [nil :update])]
-			 [(f val) op]))))
+	     (update
+	      mem-bucket k
+	      (fn [old-tuple]
+		(let [[val op] (or old-tuple [(bucket-get b k) :put])]
+		  [(f val) op]))))
      (delete [this k]
-		    (delete mem-bucket k)
-		    (delete b k))
+	     (delete mem-bucket k)
+	     (delete b k))
      (put [this k v]
-		 (put mem-bucket k [v :put]))
+	  (put mem-bucket k [v :put]))
      (batch-put [this kvs] (default-batch-put this kvs))
      (sync [this]
-		  (write-blocks! (checkpoint-seq mem-bucket) b block-size)
-		  (sync b))
+	   (write-blocks! (checkpoint-seq mem-bucket) b block-size)
+	   (sync b))
      (close [this]
-		   (write-blocks! (checkpoint-seq mem-bucket) b block-size)
-		   (close b)))))
+	    (write-blocks! (checkpoint-seq mem-bucket) b block-size)
+	    (close b)))))
 
 (defn wrapper-policy [b {:keys [merge cache?] :as args}]
   (cond
