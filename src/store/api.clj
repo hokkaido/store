@@ -2,16 +2,19 @@
   (:refer-clojure :exclude [remove])
   (:use [plumbing.core :only [?> ?>> map-from-vals map-map]]
 	[clojure.java.io :only [file]]
-	[plumbing.error :only [with-ex logger]]
-	store.net
-	store.bdb
-        store.s3)
+	[plumbing.error :only [with-ex logger]])
   (:require [plumbing.observer :as obs]
 	    [store.core :as bucket])
   (:import [java.util.concurrent Executors TimeUnit
 	    ConcurrentHashMap]))
 
-(declare bucket-ops store-op)
+(defn add-bucket [bucket-map bucket-name context]
+  (let [bucket (bucket/create-buckets (assoc context
+					:name bucket-name))]
+    (bucket/put
+     bucket-map
+     bucket-name
+     bucket)))
 
 (defprotocol IStore
   (exec [this fn-form] "execute a fn on the server, giving the store as the only argument.")
@@ -22,15 +25,10 @@
 
 (deftype Store [bucket-map dispatch context]
   IStore
-  (exec [this form] ((eval form) this))
+  (exec [this f] (f this))
   (bucket [this bucket-name] (bucket/get bucket-map bucket-name))
   (buckets [this _] (bucket/keys bucket-map))
-  (add [this bucket-name] (let [bucket (bucket/create-buckets (assoc context
-							 :name bucket-name))]
-			    (bucket/put
-			     bucket-map
-			     bucket-name
-			     bucket)))
+  (add [this bucket-name] (add-bucket bucket-map bucket-name context))
   (remove [this bucket-name] (bucket/delete bucket-map bucket-name))
   clojure.lang.IFn
   (invoke [this op]
@@ -51,29 +49,12 @@
       :add add
       :remove remove})
 
-(defn store-op [^store.api.Store store op & args]
+(defn dispatch [^store.api.IStore store op & args]
   (let [{:keys [type]} (.context store)
-        name (first args)
-	args (rest args)]
-    (cond
-     ;;should just send fn.  over rest, it gets quoted and then evaled on server.
-     (= op :eval) ((eval name) store)
-     (find bucket-ops op)
-     (let [local ((op bucket-ops) store name)]
-       (if-not (= type :rest) local
-               ((op rest-bucket-ops) store name)))
-     :else
-     (let [read (bucket/read-ops op)
-	   spec (->> name (bucket/get (.bucket-map store)))
-	   b (if read (:read spec)
-		 (:write spec))
-	   f (or read (bucket/write-ops op))]
-       (when-not b
-	 (when-not spec
-	   (throw (Exception. (format "No bucket %s" name))))
-	 (let [read-or-write (if read "read" "write")]
-	   (throw (Exception. (format "No %s operation for bucket %s" read-or-write name)))))
-       (apply f b args)))))
+        name (first args)]
+    (if (find bucket-ops op)
+      ((op bucket-ops) store name)
+      (bucket/dispatch (.bucket-map store) op name (rest args)))))
 
 ;;TODO: fucked, create a coherent model for store flush and shutdown
 (defn flush! [^Store store]
@@ -126,23 +107,30 @@
          b)))
    m))
 
-(defn store [bucket-specs & [context]]
-  (let [context (update-in (or context {}) [:observer]
-                           obs/sub-observer (obs/gen-key "store"))]
-    (-> (bucket/buckets bucket-specs context)
-	start-flush-pools
-	(Store.
-	 (obs/observed-fn
-	    (:observer context) :counts
-	    {:type :counts :group (obs/observed-fn
-				   (:observer context) :counts
-				   {:type :counts :group (fn [[_ op b]] [b op])}
-				   store-op)}
-	    store-op)
-	 context))))
+(defmulti store (fn [bs & [context]]
+		  (if (= :rest (:type context))
+		    :rest :default)))
+
+(defn observe-dispatch [dispatch context]
+  (obs/observed-fn
+   (:observer context) :counts
+   {:type :counts :group (obs/observed-fn
+			  (:observer context) :counts
+			  {:type :counts :group (fn [[_ op b]] [b op])}
+			  dispatch)}
+   dispatch))
+
+(defmethod store :default [bucket-specs & [context]]
+	   (let [context (update-in (or context {}) [:observer]
+				    obs/sub-observer (obs/gen-key "store"))]
+	     (-> (bucket/buckets bucket-specs context)
+		 start-flush-pools
+		 (Store.
+		  (observe-dispatch dispatch context)
+		  context))))
 
 (defn clone [^store.api.Store s & [context]]
-  (store (bucket/keys (.bucket-map s)) context))
+  (store (bucket/keys (.bucket-map s)) context)) 
 
 (defn mirror-remote [spec]
   (let [s (store [] spec)

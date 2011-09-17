@@ -1,6 +1,5 @@
 (ns store.net-test
   (:use clojure.test
-        store.net
         [store.core-test :only [generic-bucket-test]]
         [plumbing.core :only [find-first]]
         [plumbing.error :only [with-ex logger]]
@@ -8,11 +7,12 @@
 	[compojure.core :only [routes]])
   (:require [store.api :as store]
 	    [store.core :as bucket]
+	    [store.net :as rest]
 	    [clj-json.core :as json]))
 
 (use-fixtures :each
               (fn [f]
-                (let [server (store-server
+                (let [server (rest/store-server
 			      (store/store ["b1" "b2"]
 				     {:merge (fn [_ x y]
 					       (+ (or x 0) y))}))]
@@ -39,42 +39,42 @@
     (is (= {:body "null"
             :headers {"Content-Type" "application/json; charset=UTF-8"}
             :status 200}
-           (handle-request s {:name "hm" :op "put"} "k1" 42)))
+           (rest/handle-request s {:name "hm" :op "put"} "k1" 42)))
     (is (= {:body "42"
             :headers {"Content-Type" "application/json; charset=UTF-8"}
             :status 200}
-           (handle-request s {:name "hm" :op "get"} "k1")))
+           (rest/handle-request s {:name "hm" :op "get"} "k1")))
 
     (is (= {:body "callback(42)"
 	    :headers {"Content-Type" "text/javascript; charset=UTF-8"}
 	    :status 200}
-	   (handle-request s {:name "hm" :op "get" "callback" "callback"} "k1")))
+	   (rest/handle-request s {:name "hm" :op "get" "callback" "callback"} "k1")))
 
 
     (is (= {:body "callback([[\"k1\",42]])"
 	    :headers {"Content-Type" "text/javascript; charset=UTF-8"}
 	    :status 200}
-	   (handle-request s {:name "hm" :op "seq" "callback" "callback"})))
+	   (rest/handle-request s {:name "hm" :op "seq" "callback" "callback"})))
 
     
-    (handle-request s {:name "hm" :op "put"} "k2" 42)
+    (rest/handle-request s {:name "hm" :op "put"} "k2" 42)
     (is (= #{"k1" "k2"}
-	   (into #{} (map json/parse-string (:body (handle-request s {:name "hm" :op "keys"}))))))
+	   (into #{} (map json/parse-string (:body (rest/handle-request s {:name "hm" :op "keys"}))))))
 
     ;; NPE since hashmaps don't support nil vals
     (is (= {:body "null"
             :headers {"Content-Type" "application/json; charset=UTF-8"}
             :status 200}
-           (handle-request s {:name "fs" :op "put"} "null-k" nil)))
+           (rest/handle-request s {:name "fs" :op "put"} "null-k" nil)))
     (is (= {:body "null"
             :headers {"Content-Type" "application/json; charset=UTF-8"}
             :status 200}
-           (handle-request s {:name "fs" :op "get"} "null-k")))
+           (rest/handle-request s {:name "fs" :op "get"} "null-k")))
 
     ;; Merge
-    (handle-request s {:name "hm" :op "merge"} "k1" 42)
+    (rest/handle-request s {:name "hm" :op "merge"} "k1" 42)
     (is (= "84"
-	   (:body (handle-request s {:name "hm" :op "get"}  "k1"))))))
+	   (:body (rest/handle-request s {:name "hm" :op "get"}  "k1"))))))
 
 (deftest rest-bucket-test
   (let [b (bucket/bucket {:type :rest

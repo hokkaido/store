@@ -9,7 +9,9 @@
 	[ring.adapter.jetty :only [run-jetty]]
 	[services.core :only [start-web]]
         [ring.util.codec :only [url-decode url-encode]])
-  (:require [store.core :as bucket]
+  (:require [plumbing.observer :as obs]
+	    [store.core :as bucket]
+	    [store.api :as store]
 	    [clojure.string :as str]
             [clj-json.core :as json]
 	    [clojure.contrib.logging :as log]
@@ -80,16 +82,40 @@
 	 (merge {:keywordize? keywordize?})
 	 (process-client-response op))))
 
-(defn rest-op [op store bucket-name]
-  (rest-call (assoc (.context store)
-			  :op op
-			  :name bucket-name)))
+(deftype RestStore [bucket-map dispatch context]
+  store/IStore
+  (exec [this form]
+	;;ensure form is evalable.
+	(eval form)
+	(rest-call (assoc context :op "exec" :body form)))
+  (buckets [this _] (rest-call (assoc context :op "buckets")))
+  (bucket [this bucket-name] (rest-call (assoc context :op  "bucket" :name bucket-name)))
+  (add [this bucket-name]
+       (store/add-bucket bucket-map bucket-name context)
+       (rest-call (assoc context :op  "add" :name bucket-name)))
+  (remove [this bucket-name]
+	  (bucket/delete bucket-map bucket-name)
+	  (rest-call (assoc context :op  "remove" :name bucket-name)))
+  clojure.lang.IFn
+  (invoke [this op]
+	  (dispatch this op nil))
+  (invoke [this op bucket-name]
+	  (dispatch this op bucket-name))
+  (invoke [this op bucket-name key]
+	  (dispatch this op bucket-name key))
+  (invoke [this op bucket-name key val]
+	  (dispatch this op bucket-name key val))
+  (applyTo [this args]
+	   (apply dispatch this args)))
 
-(def rest-bucket-ops
-     {:add (partial rest-op "add")
-      :remove (partial rest-op "remove")
-      :bucket (partial rest-op "bucket")
-      :buckets (partial rest-op "buckets")})
+(defmethod store/store :rest [bucket-specs & [context]]
+	   (let [context (update-in (or context {}) [:observer]
+				    obs/sub-observer (obs/gen-key "store"))]
+	     (-> (bucket/buckets bucket-specs context)
+		 store/start-flush-pools
+		 (RestStore.
+		  (store/observe-dispatch store/dispatch context)
+		  context))))
 
 (defn parse-body [^java.io.InputStream b]
   (json/parse-string (IOUtils/toString b "UTF8")))
@@ -105,11 +131,8 @@
   (let [op (keyword op)]
     (cond (bucket/streaming-ops op)
 	  (map json/generate-string data)
-	  (or (bucket/write-ops op)
-	      (rest-bucket-ops op))
-	  (to-json data)
 	  :else
-	  (json/generate-string data))))
+	  (to-json data))))
 
 (defn rest-response [status op data]
   (assoc {:headers
@@ -137,6 +160,9 @@
 	    data (if (#{"seq" "keys"} o)
 		   (seq-post-process p data)
 		   data)]
+
+	(when (= o "add") (println (format "tried to add %s" data)))
+	
 	(if callback
 	  (jsonp-response callback data)
 	  (rest-response 200 o data)))
@@ -147,7 +173,7 @@
 
 (defn rest-store-handler [s]
   (let [handle (partial with-ex (logger) handle-request s)]
-    [ ;; seq, keys, sync, close
+    [ ;; seq, keys, sync, close, add
      (GET "/store/:op" {p :params}
 	  (handle p))
      (GET "/store/:op/:name" {p :params}

@@ -331,6 +331,19 @@
       :close close
       :optimize optimize})
 
+(defn dispatch [buckets op name args]
+  (let [read (read-ops op)
+	f (or read (write-ops op))
+	spec (get buckets name)
+	b (if read (:read spec)
+	      (:write spec))]
+    (when-not b
+      (when-not spec
+	(throw (Exception. (format "No bucket %s" name))))
+      (let [read-or-write (if read "read" "write")]
+	(throw (Exception. (format "No %s operation for bucket %s" read-or-write name)))))
+    (apply f b args)))
+
 (defn create-buckets [{:keys [read write] :as spec}]
   (let [r (bucket (if read (clj/merge spec read) spec))
 	w (if write

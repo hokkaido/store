@@ -102,8 +102,8 @@
 
 (deftest eval-test
   (let [s (store/store ["a"])]
-    (s :eval
-       '(fn [x] (x :put "a" "b" "c")))
+    (s :exec
+       (fn [x] (x :put "a" "b" "c")))
     (is (= "c" (s :get "a" "b")))))
 
 (defn generic-store-test [store]
