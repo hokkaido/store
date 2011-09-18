@@ -200,10 +200,10 @@
     (reify
      IReadBucket
      (get [this k]
-	  (or (when-let [[v op] (bucket/get mem-bucket k)]
+	  (or (when-let [[v op] (get mem-bucket k)]
 		v)
-	      (when-let [v (bucket/get b k)]
-		(bucket-merge this k v)
+	      (when-let [v (get b k)]
+		(merge this k v)
 		v)))
      (exists? [this k] (or (exists? mem-bucket k) (exists? b k)))
      (keys [this] (throw (UnsupportedOperationException.)))
@@ -222,7 +222,7 @@
 	     (update
 	      mem-bucket k
 	      (fn [old-tuple]
-		(let [[val op] (or old-tuple [(bucket-get b k) :put])]
+		(let [[val op] (or old-tuple [(get b k) :put])]
 		  [(f val) op]))))
      (delete [this k]
 	     (delete mem-bucket k)

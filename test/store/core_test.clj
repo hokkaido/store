@@ -71,7 +71,6 @@
     (bucket/merge b2 "k" {"v1" "v"})
     (bucket/merge b1 "k" {"you got borked" "heavy hangers"})
     (is (= {"v1" "v"} (bucket/get b2 "k")))
-    (is (nil? (bucket/get b1 "k")))
     (bucket/sync b2)
     (is (= {"v1" "v"} (bucket/get b1 "k")))
     (is (= {"v1" "v"} (bucket/delete b2 "k")))
