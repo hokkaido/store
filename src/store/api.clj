@@ -114,10 +114,7 @@
 (defn observe-dispatch [dispatch context]
   (obs/observed-fn
    (:observer context) :counts
-   {:type :counts :group (obs/observed-fn
-			  (:observer context) :counts
-			  {:type :counts :group (fn [[_ op b]] [b op])}
-			  dispatch)}
+   {:type :counts :group (fn [[_ op b]] [b op])}
    dispatch))
 
 (defmethod store :default [bucket-specs & [context]]
