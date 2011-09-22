@@ -4,7 +4,9 @@
 	[clojure.java.io :only [file]]
 	[plumbing.error :only [with-ex logger]])
   (:require [plumbing.observer :as obs]
-	    [store.core :as bucket])
+	    [store.core :as bucket]
+	    store.s3
+	    store.bdb)
   (:import [java.util.concurrent Executors TimeUnit
 	    ConcurrentHashMap]))
 
